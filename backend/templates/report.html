@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SiteScope Red Flag Report</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+            @bottom-center {
+                content: "SiteScope Red Flag Report — Page " counter(page) " of " counter(pages);
+                font-size: 9px;
+                color: #9CA3AF;
+            }
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #1F2937;
+            line-height: 1.6;
+            font-size: 11pt;
+        }
+
+        h1 {
+            font-size: 22pt;
+            color: #111827;
+            margin-bottom: 4px;
+        }
+
+        h2 {
+            font-size: 15pt;
+            color: #374151;
+            border-bottom: 2px solid #E5E7EB;
+            padding-bottom: 6px;
+            margin-top: 28px;
+        }
+
+        h3 {
+            font-size: 12pt;
+            color: #4B5563;
+            margin-top: 16px;
+        }
+
+        .subtitle {
+            color: #6B7280;
+            font-size: 11pt;
+            margin-bottom: 24px;
+        }
+
+        .risk-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 11pt;
+            letter-spacing: 0.5px;
+        }
+
+        .risk-HIGH { background: #FEE2E2; color: #DC2626; }
+        .risk-MEDIUM { background: #FEF3C7; color: #D97706; }
+        .risk-LOW { background: #D1FAE5; color: #059669; }
+        .risk-NONE { background: #F3F4F6; color: #6B7280; }
+        .risk-UNKNOWN { background: #F9FAFB; color: #9CA3AF; }
+
+        .executive-summary {
+            background: #F9FAFB;
+            border-left: 4px solid #3B82F6;
+            padding: 16px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .red-flags {
+            background: #FEF2F2;
+            border: 1px solid #FECACA;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+
+        .red-flags ul {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .red-flags li {
+            margin-bottom: 6px;
+            color: #991B1B;
+        }
+
+        .category-section {
+            margin: 24px 0;
+            padding: 16px 20px;
+            border-radius: 8px;
+            border: 1px solid #E5E7EB;
+        }
+
+        .category-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .category-emoji {
+            font-size: 18pt;
+        }
+
+        .finding {
+            margin: 12px 0;
+            padding: 10px 14px;
+            border-radius: 6px;
+            border-left: 3px solid;
+        }
+
+        .finding-HIGH { border-color: #DC2626; background: #FEF2F2; }
+        .finding-MEDIUM { border-color: #F59E0B; background: #FFFBEB; }
+        .finding-LOW { border-color: #10B981; background: #ECFDF5; }
+        .finding-NONE { border-color: #D1D5DB; background: #F9FAFB; }
+        .finding-UNKNOWN { border-color: #D1D5DB; background: #F9FAFB; }
+
+        .finding-title {
+            font-weight: 600;
+            font-size: 10.5pt;
+        }
+
+        .finding-desc {
+            font-size: 9.5pt;
+            color: #4B5563;
+            margin-top: 4px;
+        }
+
+        .finding-evidence {
+            font-size: 8.5pt;
+            color: #6B7280;
+            font-style: italic;
+            margin-top: 4px;
+        }
+
+        .actions {
+            margin-top: 12px;
+        }
+
+        .actions h4 {
+            font-size: 10pt;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+
+        .actions ul {
+            padding-left: 18px;
+            font-size: 9.5pt;
+        }
+
+        .sources {
+            font-size: 8.5pt;
+            color: #6B7280;
+            margin-top: 8px;
+        }
+
+        .sources a {
+            color: #3B82F6;
+            text-decoration: none;
+        }
+
+        .metadata {
+            margin-top: 32px;
+            padding-top: 12px;
+            border-top: 1px solid #E5E7EB;
+            font-size: 8.5pt;
+            color: #9CA3AF;
+        }
+
+        .logo-text {
+            font-size: 10pt;
+            font-weight: 700;
+            color: #3B82F6;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="logo-text">🔍 SITESCOPE</div>
+    <h1>Red Flag Report</h1>
+    <p class="subtitle">
+        Location: {{ "%.4f"|format(report.lat) }}, {{ "%.4f"|format(report.lng) }}
+        {% if report.address %} — {{ report.address }}{% endif %}
+        <br>
+        Generated: {{ report.generated_at[:19] }} UTC
+        | Agents: {{ report.agents_run }}
+        | Duration: {{ report.analysis_duration_ms }}ms
+    </p>
+
+    <!-- Overall Risk -->
+    <p>
+        <strong>Overall Risk Level:</strong>
+        <span class="risk-badge risk-{{ report.overall_risk_level.value }}">
+            {{ report.overall_risk_level.value }}
+        </span>
+    </p>
+
+    <!-- Executive Summary -->
+    <h2>Executive Summary</h2>
+    <div class="executive-summary">
+        {{ report.executive_summary }}
+    </div>
+
+    <!-- Key Red Flags -->
+    {% if report.key_red_flags %}
+    <div class="red-flags">
+        <strong>🚩 Key Red Flags</strong>
+        <ul>
+        {% for flag in report.key_red_flags %}
+            <li>{{ flag }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Risk Categories -->
+    <h2>Detailed Risk Analysis</h2>
+
+    {% for cat in report.categories %}
+    <div class="category-section" style="border-color: {{ cat.risk_level | risk_color }}20;">
+        <div class="category-header">
+            <span class="category-emoji">{{ cat.emoji }}</span>
+            <h3 style="margin: 0;">{{ cat.category_label }}</h3>
+            <span class="risk-badge risk-{{ cat.risk_level.value }}" style="margin-left: auto;">
+                {{ cat.risk_level.value }}
+            </span>
+        </div>
+
+        <p>{{ cat.summary }}</p>
+
+        {% for finding in cat.findings %}
+        <div class="finding finding-{{ finding.risk_level.value }}">
+            <div class="finding-title">
+                <span class="risk-badge risk-{{ finding.risk_level.value }}" style="font-size: 8pt; padding: 2px 6px;">
+                    {{ finding.risk_level.value }}
+                </span>
+                {{ finding.title }}
+            </div>
+            <div class="finding-desc">{{ finding.description }}</div>
+            {% if finding.evidence %}
+            <div class="finding-evidence">Evidence: {{ finding.evidence }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        {% if cat.recommended_actions %}
+        <div class="actions">
+            <h4>Recommended Actions:</h4>
+            <ul>
+            {% for action in cat.recommended_actions %}
+                <li>{{ action }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if cat.source_links %}
+        <div class="sources">
+            <strong>Sources:</strong>
+            {% for link in cat.source_links %}
+                <a href="{{ link }}">{{ link }}</a>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <!-- Metadata -->
+    <div class="metadata">
+        <p>
+            This report was generated automatically by SiteScope using publicly available
+            geodata from Bayern LfU, BLfD, and other open data sources. It is intended
+            as a preliminary screening tool and does not replace professional due diligence.
+            Always verify findings with the responsible authorities.
+        </p>
+        <p>
+            Coordinate System: EPSG:25832 (queries) / WGS84 (display)
+            | Data sources: {{ report.total_layers_queried }} layers queried
+        </p>
+    </div>
+</body>
+</html>
