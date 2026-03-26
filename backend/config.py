@@ -33,7 +33,7 @@ def get_settings() -> Settings:
 # =============================================================================
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_MODEL = "minimax/minimax-m2.5:free"
+OPENROUTER_MODEL = "minimax/minimax-m2.5"
 
 # =============================================================================
 # WMS Service URLs — Bayern LfU & BLfD (all free, no API keys)
