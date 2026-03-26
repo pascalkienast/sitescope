@@ -90,16 +90,24 @@ class WMSClient:
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # === DEBUG: Log full request URL ===
+                request_url = httpx.URL(self.base_url, params=params)
+                logger.debug("WMS REQUEST: GET %s", request_url)
+
                 response = await client.get(self.base_url, params=params)
                 response.raise_for_status()
 
                 raw = response.text
                 logger.debug(
-                    "GetFeatureInfo %s layers=%s → %d bytes",
+                    "WMS RESPONSE: %s layers=%s → %d bytes, status=%d, content-type=%s",
                     self.base_url,
                     layers,
                     len(raw),
+                    response.status_code,
+                    response.headers.get("content-type", "unknown"),
                 )
+                # Log first 500 chars of response for debugging
+                logger.debug("WMS RESPONSE BODY (first 500 chars): %s", raw[:500])
 
                 # Parse based on format
                 if "gml" in info_format.lower() or "xml" in info_format.lower():

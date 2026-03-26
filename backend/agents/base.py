@@ -38,17 +38,32 @@ class BaseAgent(ABC):
         )
 
         try:
+            logger.debug("Agent %s starting analysis for (%.4f, %.4f)", self.agent_name, lat, lng)
             findings = await self._run_analysis(lat, lng)
             result.findings = findings
             result.layers_with_data = sum(1 for f in findings if f.evidence)
             result.risk_level = self._calculate_overall_risk(findings)
             result.summary = self._build_summary(findings)
+
+            # === DEBUG: Log all findings ===
+            logger.debug(
+                "Agent %s finished: %d findings, %d with data, risk=%s",
+                self.agent_name, len(findings), result.layers_with_data, result.risk_level.value,
+            )
+            for i, f in enumerate(findings):
+                logger.debug(
+                    "  Finding %d: [%s] %s — evidence=%s, layer=%s",
+                    i + 1, f.risk_level.value, f.title,
+                    f.evidence[:200] if f.evidence else "NONE",
+                    f.layer_name or "N/A",
+                )
         except Exception as e:
             logger.exception("Agent %s failed", self.agent_name)
             result.errors.append(f"{type(e).__name__}: {e}")
             result.risk_level = RiskLevel.UNKNOWN
 
         result.execution_time_ms = int((time.monotonic() - start) * 1000)
+        logger.debug("Agent %s completed in %dms", self.agent_name, result.execution_time_ms)
         return result
 
     @abstractmethod

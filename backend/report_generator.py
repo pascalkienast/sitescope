@@ -144,6 +144,17 @@ class ReportGenerator:
         # Build the data summary for the LLM
         data_summary = self._format_agent_data(lat, lng, agent_results)
 
+        # === DEBUG: Log full LLM request ===
+        logger.debug("=" * 80)
+        logger.debug("LLM REQUEST — Model: %s", self.model)
+        logger.debug("=" * 80)
+        logger.debug("SYSTEM PROMPT:\n%s", SYSTEM_PROMPT)
+        logger.debug("-" * 80)
+        logger.debug("USER PROMPT (agent data):\n%s", data_summary)
+        logger.debug("-" * 80)
+        logger.debug("Parameters: temperature=0.3, max_tokens=2000")
+        logger.debug("=" * 80)
+
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -161,6 +172,19 @@ class ReportGenerator:
 
             raw_content = response.choices[0].message.content.strip()
 
+            # === DEBUG: Log full LLM response ===
+            logger.debug("=" * 80)
+            logger.debug("LLM RESPONSE — Raw:")
+            logger.debug("%s", raw_content)
+            if hasattr(response, "usage") and response.usage:
+                logger.debug(
+                    "Token usage: prompt=%s, completion=%s, total=%s",
+                    response.usage.prompt_tokens,
+                    response.usage.completion_tokens,
+                    response.usage.total_tokens,
+                )
+            logger.debug("=" * 80)
+
             # Try to extract JSON from the response (handle markdown code blocks)
             json_str = raw_content
             if "```json" in json_str:
@@ -168,10 +192,16 @@ class ReportGenerator:
             elif "```" in json_str:
                 json_str = json_str.split("```", 1)[1].split("```", 1)[0]
 
-            return json.loads(json_str.strip())
+            parsed = json.loads(json_str.strip())
+
+            # === DEBUG: Log parsed JSON ===
+            logger.debug("LLM PARSED JSON:\n%s", json.dumps(parsed, indent=2, ensure_ascii=False))
+
+            return parsed
 
         except json.JSONDecodeError as e:
             logger.warning("LLM returned invalid JSON: %s", e)
+            logger.debug("LLM raw content that failed to parse:\n%s", raw_content)
             return None
         except Exception as e:
             logger.warning("LLM call failed: %s — using fallback", e)
