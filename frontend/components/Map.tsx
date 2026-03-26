@@ -30,8 +30,13 @@ interface MapProps {
 
 const DEFAULT_CENTER: [number, number] = [11.576, 48.137];
 const DEFAULT_ZOOM = 12;
-const PARCEL_OVERLAY_URL =
-  "https://geoservices.bayern.de/od/wms/alkis/v1/parzellarkarte?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=by_alkis_parzellarkarte_umr_gelb&STYLES=&FORMAT=image/png&TRANSPARENT=true&WIDTH=256&HEIGHT=256&CRS=EPSG:3857&BBOX={bbox-epsg-3857}";
+const PARCEL_BASEMAP_TILES = [
+  // The official WMTS is stable and switches to the ALKIS parcel map
+  // in the highest zoom levels, unlike the flaky public WMS variant.
+  "https://wmtsod1.bayernwolke.de/wmts/by_amtl_karte/smerc/{z}/{x}/{y}",
+  "https://wmtsod2.bayernwolke.de/wmts/by_amtl_karte/smerc/{z}/{x}/{y}",
+  "https://wmtsod3.bayernwolke.de/wmts/by_amtl_karte/smerc/{z}/{x}/{y}",
+];
 
 const OSM_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -368,7 +373,7 @@ function ensureMapLayers(map: maplibregl.Map) {
   if (!map.getSource("parcel-overlay")) {
     map.addSource("parcel-overlay", {
       type: "raster",
-      tiles: [PARCEL_OVERLAY_URL],
+      tiles: PARCEL_BASEMAP_TILES,
       tileSize: 256,
     });
   }
@@ -379,7 +384,7 @@ function ensureMapLayers(map: maplibregl.Map) {
       type: "raster",
       source: "parcel-overlay",
       layout: { visibility: "none" },
-      paint: { "raster-opacity": 0.8 },
+      paint: { "raster-opacity": 1 },
     });
   }
 
@@ -529,11 +534,18 @@ function syncParcelOverlay(
   mode: AnalysisMode,
   showParcelOverlay: boolean
 ) {
-  if (!map.getLayer("parcel-overlay")) return;
+  if (!map.getLayer("parcel-overlay") || !map.getLayer("osm-tiles")) return;
+
+  const showOfficialBasemap = mode === "area" && showParcelOverlay;
   map.setLayoutProperty(
     "parcel-overlay",
     "visibility",
-    mode === "area" && showParcelOverlay ? "visible" : "none"
+    showOfficialBasemap ? "visible" : "none"
+  );
+  map.setLayoutProperty(
+    "osm-tiles",
+    "visibility",
+    showOfficialBasemap ? "none" : "visible"
   );
 }
 
