@@ -20,7 +20,6 @@ from lxml import etree
 from models import ParsedRawData, RawDataBlock, RawDataField
 
 PLACEHOLDER_VALUES = {"", "null", "none", "nan", "n/a", "na"}
-RAW_PREVIEW_LIMIT = 1200
 RAW_FALLBACK_EXCERPT_LIMIT = 800
 
 
@@ -363,13 +362,11 @@ def parsed_raw_data_to_text(
 
 def make_original_raw_response_preview(
     raw_response: str,
-    *,
-    max_chars: int = RAW_PREVIEW_LIMIT,
 ) -> Optional[str]:
-    """Keep a capped preview of the original raw response for debug inspection."""
+    """Keep the full original raw response for debug inspection."""
     if not raw_response or not raw_response.strip():
         return None
-    return _clip_text(raw_response.strip(), max_chars=max_chars)
+    return raw_response.strip()
 
 
 def _clip_text(text: str, *, max_chars: int) -> str:
