@@ -289,7 +289,7 @@ WMS_RLP_HERITAGE = {
         "GDKE RLP Denkmalkartierung (Heritage)",
         ["pgis_landesdenkmalpflege_sld", "denkmalzonen", "bga", "edm_flaechen", "edm_linien", "edm_punkte"],
         version="1.1.1",
-        crs="EPSG:25832",
+        crs="EPSG:4326",
         info_format=GML_INFO_FORMAT,
     ),
 }

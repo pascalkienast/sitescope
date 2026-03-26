@@ -21,6 +21,8 @@ from config import (
     DEFAULT_WMS_VERSION,
     OPENROUTER_BASE_URL,
     WMS_DIAGNOSTIC_SOURCE_GROUPS,
+    WMS_RLP_DIAGNOSTIC_SOURCE_GROUPS,
+    RLP_BBOX,
 )
 from geo import (
     build_parsed_raw_data,
@@ -477,12 +479,23 @@ async def debug_sources(
                     )
                 )
 
-        # Note: RLP WMS sources are excluded from auto-testing because they:
-        # 1. Return empty responses at arbitrary test points (flood zones are specific river areas)
-        # 2. GDKE heritage service is slow/intermittent
-        # 3. INSPIRE nature only supports GetMap, not GetFeatureInfo
-        # RLP sources are tested dynamically when user selects RLP coordinates for analysis.
-        # To re-enable RLP diagnostics, add RLP_WMS_DIAGNOSTIC_SOURCE_GROUPS iteration here.
+        # RLP WMS sources (test at RLP test point for diagnostic)
+        # Note: These services may return empty responses if the test point doesn't have data
+        # in the queried layer - this is expected behavior for geographic services
+        rlp_lat = (RLP_BBOX["lat_min"] + RLP_BBOX["lat_max"]) / 2
+        rlp_lng = (RLP_BBOX["lng_min"] + RLP_BBOX["lng_max"]) / 2
+        for category, services in WMS_RLP_DIAGNOSTIC_SOURCE_GROUPS:
+            for key, svc in services.items():
+                tasks.append(
+                    _check_wms_service(
+                        client,
+                        category,
+                        key,
+                        svc,
+                        lat=rlp_lat,
+                        lng=rlp_lng,
+                    )
+                )
 
         # Non-WMS APIs
         tasks.append(_check_open_meteo(client, lat=lat, lng=selected_lng))
