@@ -21,6 +21,8 @@ from config import (
     DEFAULT_WMS_VERSION,
     OPENROUTER_BASE_URL,
     WMS_DIAGNOSTIC_SOURCE_GROUPS,
+    WMS_RLP_DIAGNOSTIC_SOURCE_GROUPS,
+    RLP_BBOX,
 )
 from geo import (
     build_parsed_raw_data,
@@ -43,6 +45,14 @@ DEFAULT_TEST_LAT, DEFAULT_TEST_LNG = 48.137, 11.576
 CHECK_TIMEOUT = 15.0
 
 BBOX_BUFFER = 50  # meters
+
+
+def _is_in_rlp(lat: float, lng: float) -> bool:
+    """Check if coordinates are within RLP bounding box."""
+    return (
+        RLP_BBOX["lat_min"] <= lat <= RLP_BBOX["lat_max"]
+        and RLP_BBOX["lng_min"] <= lng <= RLP_BBOX["lng_max"]
+    )
 
 
 def _bbox_25832(lat: float, lng: float) -> str:
@@ -201,12 +211,14 @@ async def _check_wms_service(
     *,
     lat: float,
     lng: float,
+    region: str = "BAVARIA",
 ) -> dict:
     """Test a single WMS service: GetCapabilities + GetFeatureInfo."""
     result: dict[str, Any] = {
         "name": f"{category} — {svc['description']}",
         "key": key,
         "type": "wms",
+        "region": region,
         "url": svc["url"],
         "capabilities_ok": False,
         "data_test_ok": False,
@@ -462,7 +474,7 @@ async def debug_sources(
         },
     ) as client:
         # Build list of WMS check coroutines
-        tasks: list[asyncio.Task] = []
+        tasks: list = []
 
         for category, services in WMS_DIAGNOSTIC_SOURCE_GROUPS:
             for key, svc in services.items():
@@ -474,6 +486,21 @@ async def debug_sources(
                         svc,
                         lat=lat,
                         lng=selected_lng,
+                    )
+                )
+
+        # RLP WMS sources (test at RLP test point for diagnostic)
+        for category, services in WMS_RLP_DIAGNOSTIC_SOURCE_GROUPS:
+            for key, svc in services.items():
+                tasks.append(
+                    _check_wms_service(
+                        client,
+                        category,
+                        key,
+                        svc,
+                        lat=50.353,  # RLP test point
+                        lng=7.597,
+                        region="RLP",
                     )
                 )
 
