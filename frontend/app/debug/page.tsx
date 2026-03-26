@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useEffect, useState, type FormEvent, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { ParsedRawData } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
@@ -127,7 +127,7 @@ function ResponseTimeBar({ ms }: { ms: number }) {
   );
 }
 
-export default function DebugPage() {
+function DebugContent() {
   const searchParams = useSearchParams();
   const initialLat = readCoordinate(
     searchParams.get("lat"),
@@ -525,6 +525,18 @@ export default function DebugPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function DebugPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-slate-500">Loading diagnostics...</div>
+      </div>
+    }>
+      <DebugContent />
+    </Suspense>
   );
 }
 
