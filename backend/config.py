@@ -276,10 +276,12 @@ WMS_RLP_LAND_VALUES = {
     "boris_rlp": _wms_service(
         "https://geo5.service24.rlp.de/wms/RLP_VBORISFREE2026.fcgi?",
         "VBORIS RLP Bodenrichtwerte (Land Values)",
-        ["Bodenrichtwerte_Basis_RLP", "RLP_1", "RLP_0"],
+        ["Bodenrichtwerte_Basis_RLP", "RLP_1"],
         version="1.1.1",
         crs="EPSG:25832",
         info_format=GML_INFO_FORMAT,
+        # GetFeatureInfo returns only boundedBy (no BRW values in Basisdienst)
+        probe="get_map",
     ),
 }
 
@@ -291,17 +293,20 @@ WMS_RLP_HERITAGE = {
         version="1.1.1",
         crs="EPSG:4326",
         info_format=GML_INFO_FORMAT,
+        # GetFeatureInfo returns empty at non-monument locations
+        probe="get_map",
     ),
 }
 
 WMS_RLP_NATURE = {
     "schutzgebiete_inspire": _wms_service(
         "https://inspire.naturschutz.rlp.de/cgi-bin/wfs/ps_wms?language=ger&",
-        "INSPIRE Schutzgebiete RLP (Nature) - monitoring only, no GetFeatureInfo",
+        "INSPIRE Schutzgebiete RLP (Nature) - monitoring only",
         ["PS.ProtectedSitesSpecialAreaOfConservation"],
         version="1.1.1",
         crs="EPSG:4326",
         info_format=GML_INFO_FORMAT,
+        # All layers have queryable="0" - GetFeatureInfo not supported
         probe="get_map",
     ),
 }
@@ -310,10 +315,11 @@ WMS_RLP_FLOOD = {
     "ueberschwemmungsgebiete_rlp": _wms_service(
         "https://geodienste-wasser.rlp-umwelt.de/maps/uesg/wms?",
         "RLP Gesetzlich festgesetzte Überschwemmungsgebiete",
-        ["risikogebiete_ausserhalb_uesg"],
+        ["uesg_gesetzlich"],
         version="1.1.1",
         crs="EPSG:4326",
         info_format=GML_INFO_FORMAT,
+        probe="get_map",
     ),
     "hochwassergefahrenkarte_rlp": _wms_service(
         "https://geodienste-wasser.rlp-umwelt.de/maps/HWGK/wms?",
@@ -322,6 +328,7 @@ WMS_RLP_FLOOD = {
         version="1.1.1",
         crs="EPSG:4326",
         info_format=GML_INFO_FORMAT,
+        probe="get_map",
     ),
 }
 
