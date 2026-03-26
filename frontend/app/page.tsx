@@ -43,7 +43,19 @@ export default function Home() {
 
       try {
         const response = await analyzeSite(lat, lng);
-        setResult(response);
+        // Check if backend returned a coverage-area error (success=false with errors)
+        if (!response.success && response.errors?.length > 0) {
+          const isCoverageError = response.errors.some(
+            (e) => e.includes("outside Bavaria") || e.includes("outside coverage")
+          );
+          if (isCoverageError) {
+            setError(`__COVERAGE__${response.errors[0]}`);
+          } else {
+            setError(response.errors.join("; "));
+          }
+        } else {
+          setResult(response);
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Analysis failed"
@@ -114,10 +126,27 @@ export default function Home() {
             {analyzing && <LoadingOverlay coords={selectedCoords} />}
             {error && !analyzing && (
               <div className="p-6">
-                <div className="bg-red-50 text-red-700 p-4 rounded-lg">
-                  <p className="font-medium">Analysis Error</p>
-                  <p className="text-sm mt-1">{error}</p>
-                </div>
+                {error.startsWith("__COVERAGE__") ? (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 p-5 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl shrink-0">📍</span>
+                      <div>
+                        <p className="font-semibold text-base">Outside Coverage Area</p>
+                        <p className="text-sm mt-2 leading-relaxed">
+                          {error.replace("__COVERAGE__", "")}
+                        </p>
+                        <p className="text-xs mt-3 text-amber-600">
+                          Try clicking a location within Bavaria on the map, or use one of the demo locations above.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-red-50 text-red-700 p-4 rounded-lg">
+                    <p className="font-medium">Analysis Error</p>
+                    <p className="text-sm mt-1">{error}</p>
+                  </div>
+                )}
               </div>
             )}
             {result && !analyzing && (

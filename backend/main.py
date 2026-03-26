@@ -79,6 +79,23 @@ async def health():
     )
 
 
+# Bavaria bounding box (approximate)
+BAVARIA_BBOX = {
+    "lat_min": 47.27,
+    "lat_max": 50.56,
+    "lng_min": 8.97,
+    "lng_max": 13.84,
+}
+
+
+def _is_in_bavaria(lat: float, lng: float) -> bool:
+    """Check whether a coordinate falls within Bavaria's bounding box."""
+    return (
+        BAVARIA_BBOX["lat_min"] <= lat <= BAVARIA_BBOX["lat_max"]
+        and BAVARIA_BBOX["lng_min"] <= lng <= BAVARIA_BBOX["lng_max"]
+    )
+
+
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest):
     """
@@ -88,6 +105,22 @@ async def analyze(request: AnalyzeRequest):
     via LLM, and returns structured JSON.
     """
     logger.info("Analyze request: (%.4f, %.4f)", request.lat, request.lng)
+
+    # --- Bavaria boundary check ---
+    if not _is_in_bavaria(request.lat, request.lng):
+        logger.info(
+            "Rejected: (%.4f, %.4f) is outside Bavaria", request.lat, request.lng
+        )
+        return AnalyzeResponse(
+            success=False,
+            report=None,
+            agent_results=[],
+            errors=[
+                f"Location ({request.lat:.4f}, {request.lng:.4f}) is outside Bavaria (Bayern). "
+                "SiteScope currently only supports locations within Bavaria, where our "
+                "geodata sources (Bayern LfU, BLfD) are available."
+            ],
+        )
 
     orchestrator = Orchestrator(include_stretch=True)
     result = await orchestrator.analyze(request.lat, request.lng)

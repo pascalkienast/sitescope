@@ -32,25 +32,37 @@ SYSTEM_PROMPT = """You are SiteScope, an expert site due diligence analyst speci
 
 You are generating a Red Flag Report — a structured risk assessment for a specific geographic location in Bavaria, Germany.
 
-You will receive structured data from multiple analysis agents (flood risk, nature protection, heritage, etc.). Your job is to:
+You will receive structured data from multiple analysis agents (flood risk, nature protection, heritage, etc.).
 
-1. Synthesize the findings into a clear, professional executive summary
-2. Identify the key red flags (most critical risks)
-3. Determine an overall risk rating (HIGH, MEDIUM, LOW)
+## STRICT DATA-GROUNDING RULES (MANDATORY)
+
+1. You MUST ONLY reference findings explicitly listed in the agent data below. If an agent found NONE/no data for a category, say exactly that — do NOT speculate about risks that are not evidenced by actual WMS query results.
+2. For each claim in your summary, cite the specific agent finding that supports it (e.g. "According to the Flood Agent, the site is in an HQ100 zone").
+3. If all agents returned NONE/no findings, the executive summary MUST state: "No significant risks were identified from available geodata sources. All queried WMS layers returned no data for this location."
+4. Do NOT invent, assume, or speculate about risks. If a WMS layer returned no data, that means NO risk was detected for that layer — do not suggest it "might still exist" or add caveats about undetected risks beyond a single standard disclaimer.
+5. The "key_red_flags" array MUST be empty if no agent found any HIGH or MEDIUM risk findings.
+6. The overall_risk_level MUST reflect the actual highest risk level found across all agent findings. If all findings are NONE/LOW, the overall level must be LOW or NONE.
+7. Do NOT fabricate source URLs. Only include URLs that appear in the agent data.
+
+## YOUR TASKS
+
+1. Synthesize the findings into a clear, professional executive summary that ONLY references actual data
+2. List key red flags — ONLY those backed by actual HIGH/MEDIUM findings from agents
+3. Determine overall risk rating based SOLELY on the agent findings
 4. Suggest recommended actions for each risk category
 
-Write in clear, professional English suitable for a due diligence report. Be specific about regulatory implications (cite German laws like WHG, BayNatSchG, BayDSchG where relevant). Do not invent data — only reference what the agents found.
+Write in clear, professional English suitable for a due diligence report. Reference German laws (WHG, BayNatSchG, BayDSchG) only when the agent data contains findings that trigger those laws.
 
 Respond ONLY with valid JSON matching this exact structure:
 {
   "overall_risk_level": "HIGH" | "MEDIUM" | "LOW",
-  "executive_summary": "2-3 paragraph summary of key findings",
-  "key_red_flags": ["list of the most critical issues"],
+  "executive_summary": "2-3 paragraph summary citing specific agent findings",
+  "key_red_flags": ["ONLY issues backed by actual agent findings with HIGH/MEDIUM risk"],
   "categories": [
     {
       "category": "flood" | "nature" | "heritage" | "zoning" | "infrastructure",
       "recommended_actions": ["specific next steps for this category"],
-      "source_links": ["relevant authority portal URLs"]
+      "source_links": ["ONLY URLs from agent data, never fabricated"]
     }
   ]
 }"""
@@ -168,13 +180,26 @@ class ReportGenerator:
     def _format_agent_data(
         self, lat: float, lng: float, agent_results: list[AgentResult]
     ) -> str:
-        """Format agent results as a structured text prompt for the LLM."""
+        """Format agent results as a structured text prompt for the LLM.
+
+        Includes raw evidence, source URLs for citation, and an explicit
+        section listing layers that returned NO data (so the LLM knows
+        what was checked and found empty vs. what was never checked).
+        """
         lines = [
             f"# Site Analysis Data for ({lat:.4f}, {lng:.4f})",
             f"Location: Bavaria, Germany",
             f"Analysis Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
             "",
+            "IMPORTANT: The data below is the ONLY source of truth. "
+            "Do NOT add any information that is not explicitly present here.",
+            "",
         ]
+
+        # Track layers with no data across all agents
+        all_empty_layers: list[str] = []
+        all_queried_count = 0
+        all_with_data_count = 0
 
         for result in agent_results:
             meta = CATEGORY_META.get(result.category, {})
@@ -184,22 +209,69 @@ class ReportGenerator:
             lines.append(f"## {emoji} {label}")
             lines.append(f"Overall Risk: {result.risk_level.value}")
             lines.append(f"Agent: {result.agent_name}")
+            lines.append(f"Layers Queried: {result.layers_queried}")
+            lines.append(f"Layers With Data: {result.layers_with_data}")
             lines.append(f"Summary: {result.summary}")
             lines.append("")
 
-            for i, finding in enumerate(result.findings, 1):
-                lines.append(f"### Finding {i}: {finding.title}")
-                lines.append(f"Risk Level: {finding.risk_level.value}")
-                lines.append(f"Description: {finding.description}")
-                if finding.evidence:
-                    lines.append(f"Evidence: {finding.evidence}")
-                if finding.source_name:
-                    lines.append(f"Source: {finding.source_name}")
+            all_queried_count += result.layers_queried
+            all_with_data_count += result.layers_with_data
+
+            if not result.findings:
+                lines.append("Findings: NONE — no data returned from any queried layer.")
                 lines.append("")
+            else:
+                # Separate findings with actual data vs NONE findings
+                positive_findings = [f for f in result.findings if f.risk_level != RiskLevel.NONE]
+                none_findings = [f for f in result.findings if f.risk_level == RiskLevel.NONE]
+
+                for i, finding in enumerate(result.findings, 1):
+                    lines.append(f"### Finding {i}: {finding.title}")
+                    lines.append(f"Risk Level: {finding.risk_level.value}")
+                    lines.append(f"Description: {finding.description}")
+                    if finding.evidence:
+                        lines.append(f"Evidence (raw): {finding.evidence}")
+                    if finding.layer_name:
+                        lines.append(f"WMS Layer: {finding.layer_name}")
+                    if finding.source_name:
+                        lines.append(f"Source: {finding.source_name}")
+                    if finding.source_url:
+                        lines.append(f"Source URL: {finding.source_url}")
+                    if finding.raw_data:
+                        lines.append(f"Raw Data: {finding.raw_data}")
+                    lines.append("")
+
+                # Track layers that returned nothing
+                for f in none_findings:
+                    layer_desc = f.layer_name or f.title
+                    all_empty_layers.append(f"{label}: {layer_desc}")
 
             if result.errors:
                 lines.append(f"Errors: {', '.join(result.errors)}")
                 lines.append("")
+
+        # Summary section: what was NOT found
+        lines.append("---")
+        lines.append("## Summary of Data Coverage")
+        lines.append(f"Total WMS/API layers queried: {all_queried_count}")
+        lines.append(f"Layers that returned data: {all_with_data_count}")
+        lines.append(f"Layers that returned NO data: {all_queried_count - all_with_data_count}")
+        lines.append("")
+
+        if all_empty_layers:
+            lines.append("### Layers Queried But Found EMPTY (no risk detected):")
+            for layer in all_empty_layers:
+                lines.append(f"  - {layer}")
+            lines.append("")
+
+        if all_with_data_count == 0:
+            lines.append(
+                "⚠️ ALL queried layers returned NO data for this location. "
+                "This means no risks were detected by any geodata source. "
+                "Your report MUST reflect this: overall risk should be LOW/NONE "
+                "and no red flags should be listed."
+            )
+            lines.append("")
 
         return "\n".join(lines)
 

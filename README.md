@@ -10,7 +10,7 @@ Click a location on the map → get a structured Red Flag Report analyzing site 
 ┌──────────────┐     POST /analyze      ┌──────────────────────┐
 │   Next.js    │  ─────────────────────► │   FastAPI Backend    │
 │   Frontend   │                         │                      │
-│  (Mapbox GL) │  ◄───────────────────── │  ┌────────────────┐  │
+│ (MapLibre GL)│  ◄───────────────────── │  ┌────────────────┐  │
 │              │     Risk Assessment     │  │  Orchestrator   │  │
 └──────────────┘         JSON            │  │  (asyncio)      │  │
                                          │  └───┬──┬──┬───────┘  │
@@ -27,8 +27,9 @@ Click a location on the map → get a structured Red Flag Report analyzing site 
                                          │                      │
                                          ▼                      │
                                   ┌──────────────┐             │
-                                  │ Claude AI    │             │
+                                  │ MiniMax M2.5 │             │
                                   │ Report Gen.  │             │
+                                  │ (OpenRouter) │             │
                                   └──────────────┘             │
                                          │                      │
                                     Red Flag Report             │
@@ -90,8 +91,8 @@ npm run dev
 
 ## Tech Stack
 
-- **Frontend:** Next.js 14 (App Router) + Mapbox GL JS + Tailwind CSS
-- **Backend:** Python FastAPI + httpx (async HTTP) + Anthropic SDK
+- **Frontend:** Next.js 14 (App Router) + MapLibre GL JS (OSM) + Tailwind CSS
+- **Backend:** Python FastAPI + httpx (async HTTP) + OpenAI SDK (OpenRouter)
 - **Geo Services:** WMS/WFS (Bayern LfU, BLfD) — free, no API keys
 - **AI:** MiniMax M2.5 via OpenRouter (free tier!) for report generation
 - **PDF:** WeasyPrint for HTML→PDF export
