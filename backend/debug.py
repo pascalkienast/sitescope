@@ -234,6 +234,7 @@ async def _check_wms_service(
         "sample_data": None,
         "parsed_raw_data": None,
         "original_raw_response_preview": None,
+        "map_image_url": None,
     }
 
     t0 = time.monotonic()
@@ -256,9 +257,14 @@ async def _check_wms_service(
         result["layers_tested"] = [test_layer]
         probe = svc.get("probe", "feature_info")
         if probe == "get_map":
+            map_params = _build_get_map_params(svc, test_layer, lat=lat, lng=lng)
+            # Store the GetMap URL for display in debug UI
+            from urllib.parse import urlencode
+            result["map_image_url"] = f"{svc['url']}{urlencode(map_params)}"
+
             map_resp = await client.get(
                 svc["url"],
-                params=_build_get_map_params(svc, test_layer, lat=lat, lng=lng),
+                params=map_params,
                 timeout=CHECK_TIMEOUT,
             )
             map_resp.raise_for_status()

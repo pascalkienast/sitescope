@@ -33,6 +33,7 @@ interface SourceResult {
   sample_data: string | null;
   parsed_raw_data?: ParsedRawData | null;
   original_raw_response_preview?: string | null;
+  map_image_url?: string | null;
 }
 
 interface DebugResponse {
@@ -483,6 +484,27 @@ function DebugContent() {
                             }
                           />
                         </div>
+
+                        {src.map_image_url && (
+                          <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                              GetMap Preview
+                            </div>
+                            <img
+                              src={src.map_image_url}
+                              alt={`WMS GetMap result for ${src.name}`}
+                              className="rounded-lg border border-slate-100 max-w-full h-auto"
+                              style={{ maxHeight: '256px' }}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                            />
+                            <p className="mt-2 text-[11px] text-slate-400 font-mono truncate">
+                              {src.map_image_url}
+                            </p>
+                          </div>
+                        )}
 
                         {src.error && (
                           <div className="rounded-xl bg-red-50 p-3 font-mono text-xs text-red-700 break-all">
