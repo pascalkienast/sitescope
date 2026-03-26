@@ -223,6 +223,7 @@ class NatureAgent(BaseAgent):
         """Interpret GetFeatureInfo result for a nature/environment layer."""
         raw = result.get("raw_response", "")
         features = result.get("features", [])
+        raw_kwargs = self._raw_data_kwargs(result)
 
         meta = NATURE_LAYER_META.get(layer_name.lower())
         if not meta:
@@ -247,7 +248,7 @@ class NatureAgent(BaseAgent):
             source_url=service_cfg["url"],
             source_name=f"Bayern LfU – {service_cfg['description']}",
             layer_name=layer_name,
-            raw_data=raw[:500],
+            **raw_kwargs,
         )
 
     def _extract_name(self, features: list[dict]) -> str | None:

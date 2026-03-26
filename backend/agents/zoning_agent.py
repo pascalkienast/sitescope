@@ -112,6 +112,7 @@ class ZoningAgent(BaseAgent):
     ) -> AgentFinding | None:
         raw = result.get("raw_response", "")
         features = result.get("features", [])
+        raw_kwargs = self._raw_data_kwargs(result)
         layer_key = layer_name.lower()
 
         if layer_key in ("mroadbylden2022", "mroadbyln2022"):
@@ -134,7 +135,7 @@ class ZoningAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Lärmkarten",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         meta = ZONING_LAYER_META.get(layer_key)
@@ -149,7 +150,7 @@ class ZoningAgent(BaseAgent):
             source_url=service_cfg["url"],
             source_name=f"Bayern LfU – {service_cfg['description']}",
             layer_name=layer_name,
-            raw_data=raw[:500],
+            **raw_kwargs,
         )
 
     async def _get_climate_context(

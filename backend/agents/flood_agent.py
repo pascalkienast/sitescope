@@ -78,6 +78,7 @@ class FloodAgent(BaseAgent):
 
         raw = result.get("raw_response", "")
         features = result.get("features", [])
+        raw_kwargs = self._raw_data_kwargs(result)
 
         # Layer-specific interpretation
         if "hq100" in layer_name.lower():
@@ -93,7 +94,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Überschwemmungsgebiete",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         elif "hqextrem" in layer_name.lower():
@@ -109,7 +110,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Überschwemmungsgebiete",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         elif "hqhaeufig" in layer_name.lower():
@@ -124,7 +125,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Überschwemmungsgebiete",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         elif "wt_hq100" in layer_name.lower():
@@ -142,7 +143,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Wassertiefen",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         elif "wt_hqhaeufig" in layer_name.lower():
@@ -158,7 +159,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Wassertiefen",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         elif "wt_hqextrem" in layer_name.lower():
@@ -174,7 +175,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Wassertiefen",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         elif layer_name.lower() == "wt_hwgg_hq100":
@@ -189,7 +190,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Wassertiefen",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         elif "starkregen" in layer_name.lower() or layer_name.lower() in ("senken_aufstau", "fliesswege"):
@@ -213,7 +214,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Oberflächenabfluss",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         elif layer_name.lower() in (
@@ -233,7 +234,7 @@ class FloodAgent(BaseAgent):
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Lawinenkataster",
                 layer_name=layer_name,
-                raw_data=raw[:500],
+                **raw_kwargs,
             )
 
         return None

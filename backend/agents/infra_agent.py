@@ -223,6 +223,7 @@ class InfraAgent(BaseAgent):
     ) -> AgentFinding | None:
         raw = result.get("raw_response", "")
         features = result.get("features", [])
+        raw_kwargs = self._raw_data_kwargs(result)
         meta = INFRA_LAYER_META.get(layer_name.lower())
         if not meta:
             return None
@@ -250,7 +251,7 @@ class InfraAgent(BaseAgent):
             source_url=service_cfg["url"],
             source_name=f"Bayern LfU – {service_cfg['description']}",
             layer_name=layer_name,
-            raw_data=raw[:500],
+            **raw_kwargs,
         )
 
     async def _get_elevation(

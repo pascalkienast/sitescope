@@ -11,6 +11,11 @@ from abc import ABC, abstractmethod
 
 from models import AgentResult, AgentFinding, AgentCategory, RiskLevel
 from geo.wms_client import WMSClient
+from geo.parsers import (
+    build_parsed_raw_data,
+    make_original_raw_response_preview,
+    parsed_raw_data_to_text,
+)
 from config import DEFAULT_CRS, DEFAULT_WMS_VERSION
 
 logger = logging.getLogger(__name__)
@@ -121,3 +126,21 @@ class BaseAgent(ABC):
             version=version or DEFAULT_WMS_VERSION,
             crs=crs or DEFAULT_CRS,
         )
+
+    def _raw_data_kwargs(self, result: dict) -> dict:
+        """Build normalized raw-data fields for an AgentFinding."""
+        raw_response = result.get("raw_response", "")
+        features = result.get("features", [])
+        parsed_raw_data = build_parsed_raw_data(features, raw_response)
+        return {
+            "parsed_raw_data": parsed_raw_data,
+            "original_raw_response_preview": make_original_raw_response_preview(
+                raw_response
+            ),
+            # Deprecated compatibility field for older clients.
+            "raw_data": parsed_raw_data_to_text(
+                parsed_raw_data,
+                max_blocks=3,
+                max_fields_per_block=10,
+            ),
+        }

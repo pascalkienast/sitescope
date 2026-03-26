@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { RiskCategoryReport, AgentFinding } from "@/lib/types";
+import type {
+  RiskCategoryReport,
+  AgentFinding,
+  ParsedRawData,
+} from "@/lib/types";
 import { RiskBadge } from "./RiskBadge";
 import { RISK_META } from "@/lib/types";
 
@@ -117,7 +121,12 @@ export function RiskCategory({ category }: RiskCategoryProps) {
 
 function FindingCard({ finding }: { finding: AgentFinding }) {
   const [showRaw, setShowRaw] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
   const riskMeta = RISK_META[finding.risk_level];
+  const hasParsedRaw =
+    !!finding.parsed_raw_data && finding.parsed_raw_data.blocks.length > 0;
+  const hasLegacyRaw = !hasParsedRaw && !!finding.raw_data;
+  const hasOriginalPreview = !!finding.original_raw_response_preview;
 
   return (
     <div
@@ -150,19 +159,84 @@ function FindingCard({ finding }: { finding: AgentFinding }) {
         </p>
       )}
 
-      {finding.raw_data && (
-        <button
-          onClick={() => setShowRaw(!showRaw)}
-          className="text-[10px] text-blue-600 mt-1 hover:underline"
-        >
-          {showRaw ? "Hide raw data" : "Show raw data"}
-        </button>
+      {(hasParsedRaw || hasLegacyRaw) && (
+        <div className="mt-2 space-y-2">
+          <button
+            onClick={() => setShowRaw(!showRaw)}
+            className="text-[10px] text-blue-600 hover:underline"
+          >
+            {showRaw ? "Hide raw data" : "Show raw data"}
+          </button>
+
+          {showRaw && hasParsedRaw && finding.parsed_raw_data && (
+            <ParsedRawDataView parsedRawData={finding.parsed_raw_data} />
+          )}
+
+          {showRaw && hasLegacyRaw && (
+            <pre className="text-[9px] text-gray-500 bg-white/70 p-2 rounded overflow-x-auto">
+              {finding.raw_data}
+            </pre>
+          )}
+        </div>
       )}
-      {showRaw && finding.raw_data && (
-        <pre className="text-[9px] text-gray-500 mt-1 bg-white/60 p-2 rounded overflow-x-auto">
-          {finding.raw_data}
-        </pre>
+
+      {hasOriginalPreview && (
+        <div className="mt-2">
+          <button
+            onClick={() => setShowOriginal(!showOriginal)}
+            className="text-[10px] text-gray-500 hover:underline"
+          >
+            {showOriginal ? "Hide original response" : "Original response"}
+          </button>
+
+          {showOriginal && (
+            <pre className="text-[9px] text-gray-500 mt-1 bg-white/70 p-2 rounded overflow-x-auto whitespace-pre-wrap break-words">
+              {finding.original_raw_response_preview}
+            </pre>
+          )}
+        </div>
       )}
+    </div>
+  );
+}
+
+function ParsedRawDataView({ parsedRawData }: { parsedRawData: ParsedRawData }) {
+  return (
+    <div className="rounded-md bg-white/70 border border-white/80 p-2 space-y-2">
+      <p className="text-[10px] uppercase tracking-wide text-gray-400">
+        Parsed {parsedRawData.source_format} response
+      </p>
+
+      {parsedRawData.blocks.map((block, index) => (
+        <div key={`${block.title}-${index}`} className="rounded border border-gray-200 bg-white p-2">
+          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+            <span className="text-[10px] font-semibold text-gray-700">
+              {block.title}
+            </span>
+            {block.layer_name && (
+              <span className="text-[9px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                Layer: {block.layer_name}
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            {block.fields.map((field, fieldIndex) => (
+              <div
+                key={`${field.key}-${fieldIndex}`}
+                className="grid grid-cols-[110px_1fr] gap-x-2 gap-y-1 text-[10px] leading-snug"
+              >
+                <span className="font-medium text-gray-600">
+                  {field.key}
+                </span>
+                <span className="text-gray-700 break-words">
+                  {field.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

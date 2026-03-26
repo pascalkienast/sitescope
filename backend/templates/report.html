@@ -137,6 +137,78 @@
             margin-top: 4px;
         }
 
+        .finding-raw {
+            margin-top: 8px;
+            padding: 8px 10px;
+            border: 1px solid #D1FAE5;
+            background: rgba(255, 255, 255, 0.75);
+            border-radius: 6px;
+        }
+
+        .finding-raw-label {
+            font-size: 8pt;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #6B7280;
+            margin-bottom: 6px;
+        }
+
+        .raw-block {
+            margin-top: 6px;
+            padding: 6px 8px;
+            border: 1px solid #E5E7EB;
+            border-radius: 4px;
+            background: #FFFFFF;
+        }
+
+        .raw-block-header {
+            font-size: 8.5pt;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+
+        .raw-block-layer {
+            font-size: 8pt;
+            font-weight: 400;
+            color: #6B7280;
+        }
+
+        .raw-grid {
+            display: table;
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .raw-row {
+            display: table-row;
+        }
+
+        .raw-key,
+        .raw-value {
+            display: table-cell;
+            font-size: 8pt;
+            padding: 2px 0;
+            vertical-align: top;
+        }
+
+        .raw-key {
+            width: 32%;
+            font-weight: 600;
+            color: #4B5563;
+            padding-right: 8px;
+        }
+
+        .raw-value {
+            color: #374151;
+        }
+
+        .raw-truncated {
+            font-size: 7.5pt;
+            color: #6B7280;
+            margin-top: 4px;
+        }
+
         .actions {
             margin-top: 12px;
         }
@@ -243,6 +315,37 @@
             <div class="finding-desc">{{ finding.description }}</div>
             {% if finding.evidence %}
             <div class="finding-evidence">Evidence: {{ finding.evidence }}</div>
+            {% endif %}
+            {% if finding.parsed_raw_data and finding.parsed_raw_data.blocks %}
+            <div class="finding-raw">
+                <div class="finding-raw-label">
+                    Parsed raw data ({{ finding.parsed_raw_data.source_format }})
+                </div>
+                {% for block in finding.parsed_raw_data.blocks[:2] %}
+                <div class="raw-block">
+                    <div class="raw-block-header">
+                        {{ block.title }}
+                        {% if block.layer_name %}
+                        <span class="raw-block-layer">| Layer: {{ block.layer_name }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="raw-grid">
+                        {% for field in block.fields[:6] %}
+                        <div class="raw-row">
+                            <div class="raw-key">{{ field.key }}</div>
+                            <div class="raw-value">{{ field.value }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if block.fields|length > 6 %}
+                    <div class="raw-truncated">Additional fields omitted for brevity.</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% if finding.parsed_raw_data.blocks|length > 2 %}
+                <div class="raw-truncated">Additional raw-data blocks omitted for brevity.</div>
+                {% endif %}
+            </div>
             {% endif %}
         </div>
         {% endfor %}

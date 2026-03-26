@@ -12,6 +12,24 @@ export type AgentCategory =
   | "zoning"
   | "infrastructure";
 
+export interface RawDataField {
+  key: string;
+  value: string;
+}
+
+export interface RawDataBlock {
+  title: string;
+  layer_name?: string | null;
+  fields: RawDataField[];
+}
+
+export interface ParsedRawData {
+  format: "key_value";
+  source_format: "html" | "gml" | "text" | "json" | "unknown";
+  feature_count: number;
+  blocks: RawDataBlock[];
+}
+
 export interface AgentFinding {
   title: string;
   description: string;
@@ -20,6 +38,8 @@ export interface AgentFinding {
   source_url: string;
   source_name: string;
   layer_name: string;
+  parsed_raw_data?: ParsedRawData | null;
+  original_raw_response_preview?: string | null;
   raw_data?: string;
 }
 

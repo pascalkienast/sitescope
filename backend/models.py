@@ -62,6 +62,27 @@ class WMSLayerResult(BaseModel):
     error: Optional[str] = None
 
 
+class RawDataField(BaseModel):
+    """One normalized key/value pair from a raw datasource response."""
+    key: str
+    value: str
+
+
+class RawDataBlock(BaseModel):
+    """A logical feature/layer block for displaying parsed raw data."""
+    title: str
+    layer_name: Optional[str] = None
+    fields: list[RawDataField] = Field(default_factory=list)
+
+
+class ParsedRawData(BaseModel):
+    """Structured raw data for UI, PDF, and prompt rendering."""
+    format: str = "key_value"
+    source_format: str = "unknown"
+    feature_count: int = 0
+    blocks: list[RawDataBlock] = Field(default_factory=list)
+
+
 class AgentFinding(BaseModel):
     """A single finding from an agent."""
     title: str
@@ -71,6 +92,8 @@ class AgentFinding(BaseModel):
     source_url: str = ""
     source_name: str = ""
     layer_name: str = ""
+    parsed_raw_data: Optional[ParsedRawData] = None
+    original_raw_response_preview: Optional[str] = None
     raw_data: Optional[str] = None
 
 

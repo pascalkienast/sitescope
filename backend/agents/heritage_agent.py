@@ -117,6 +117,7 @@ class HeritageAgent(BaseAgent):
         """Interpret GetFeatureInfo result for a heritage layer."""
         raw = result.get("raw_response", "")
         features = result.get("features", [])
+        raw_kwargs = self._raw_data_kwargs(result)
 
         meta = HERITAGE_LAYER_META.get(layer_name.lower())
         if not meta:
@@ -154,7 +155,7 @@ class HeritageAgent(BaseAgent):
             source_url=service_cfg["url"],
             source_name="BLfD Bayern Denkmäler",
             layer_name=layer_name,
-            raw_data=raw[:500],
+            **raw_kwargs,
         )
 
     def _extract_attr(self, features: list[dict], keys: list[str]) -> str | None:

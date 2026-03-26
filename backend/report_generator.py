@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from openai import AsyncOpenAI
 
+from geo.parsers import parsed_raw_data_to_text
 from models import (
     AgentResult,
     RedFlagReport,
@@ -267,8 +268,13 @@ class ReportGenerator:
                         lines.append(f"Source: {finding.source_name}")
                     if finding.source_url:
                         lines.append(f"Source URL: {finding.source_url}")
-                    if finding.raw_data:
-                        lines.append(f"Raw Data: {finding.raw_data}")
+                    parsed_raw_data = parsed_raw_data_to_text(
+                        finding.parsed_raw_data,
+                        max_blocks=2,
+                        max_fields_per_block=8,
+                    )
+                    if parsed_raw_data:
+                        lines.append(f"Raw Data (parsed): {parsed_raw_data}")
                     lines.append("")
 
                 # Track layers that returned nothing
