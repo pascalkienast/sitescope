@@ -52,6 +52,22 @@ def _bbox_25832(lat: float, lng: float) -> str:
     return ",".join(f"{value:.3f}" for value in make_bbox(lat, lng, BBOX_BUFFER))
 
 
+def _bbox_4326(lat: float, lng: float) -> str:
+    """Return a small BBOX in EPSG:4326 around the selected test point."""
+    # Approximate conversion: ~111km per degree, buffer in degrees
+    buffer_deg = BBOX_BUFFER / 111000  # Convert meters to degrees
+    return f"{lng - buffer_deg},{lat - buffer_deg},{lng + buffer_deg},{lat + buffer_deg}"
+
+
+def _bbox_for_crs(lat: float, lng: float, crs: str) -> str:
+    """Return a BBOX string in the appropriate CRS."""
+    if crs == "EPSG:4326" or crs == "EPSG:4258":
+        return _bbox_4326(lat, lng)
+    else:
+        # Default to EPSG:25832 for other CRS (UTM)
+        return _bbox_25832(lat, lng)
+
+
 def _parse_feature_info_payload(
     raw_response: str,
     *,
@@ -149,7 +165,7 @@ def _build_feature_info_params(
         "VERSION": version,
         "LAYERS": layer,
         "QUERY_LAYERS": layer,
-        "BBOX": _bbox_25832(lat, lng),
+        "BBOX": _bbox_for_crs(lat, lng, crs),
         "WIDTH": "256",
         "HEIGHT": "256",
         "INFO_FORMAT": svc.get("info_format", DEFAULT_INFO_FORMAT),
@@ -181,7 +197,7 @@ def _build_get_map_params(
         "REQUEST": "GetMap",
         "VERSION": version,
         "LAYERS": layer,
-        "BBOX": _bbox_25832(lat, lng),
+        "BBOX": _bbox_for_crs(lat, lng, crs),
         "WIDTH": "256",
         "HEIGHT": "256",
         "FORMAT": "image/png",
