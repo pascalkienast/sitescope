@@ -95,7 +95,8 @@ async def _check_wms_service(
             "HEIGHT": "256",
             "X": "128",
             "Y": "128",
-            "INFO_FORMAT": "text/plain",
+            "INFO_FORMAT": "text/html",
+            "STYLES": "",
         }
         gfi_resp = await client.get(
             svc["url"], params=gfi_params, timeout=CHECK_TIMEOUT
@@ -232,7 +233,12 @@ async def debug_sources():
     """
     async with httpx.AsyncClient(
         follow_redirects=True,
-        headers={"User-Agent": "SiteScope-Debug/1.0"},
+        headers={
+            "User-Agent": "SiteScope-Debug/1.0",
+            # Disable auto gzip — some Bayern LfU ArcGIS servers send
+            # malformed gzip for error responses, causing DecodingError.
+            "Accept-Encoding": "identity",
+        },
     ) as client:
         # Build list of WMS check coroutines
         tasks: list[asyncio.Task] = []

@@ -4,7 +4,7 @@ Parsers for WMS GetFeatureInfo responses.
 German WMS services return feature info in various formats:
 - text/plain: Simple key=value or tabular text
 - application/vnd.ogc.gml: GML/XML with feature attributes
-- text/html: HTML tables (less common)
+- text/html: HTML tables (Bayern LfU ArcGIS default)
 
 These parsers extract structured data from each format.
 """
@@ -12,6 +12,7 @@ These parsers extract structured data from each format.
 import re
 from typing import Optional
 from lxml import etree
+from html.parser import HTMLParser
 
 
 def parse_text_feature_info(response_text: str) -> list[dict]:
@@ -158,6 +159,90 @@ def parse_gml_feature_info(gml_text: str) -> list[dict]:
 
         if attrs:
             features.append({"_layer": layer_name, "_attributes": attrs})
+
+    return features
+
+
+def parse_html_feature_info(html_text: str) -> list[dict]:
+    """
+    Parse a text/html GetFeatureInfo response from ArcGIS WMS.
+
+    Bayern LfU ArcGIS servers return HTML with tables where:
+    - <td class="titel"> contains the key
+    - <td class="wert"> contains the value
+    - Multiple tables = multiple features
+    - "Kein Treffer" means no features found
+
+    Returns a list of dicts, one per feature found.
+    """
+    if not html_text or not html_text.strip():
+        return []
+
+    # Quick check for "no data" response
+    if "Kein Treffer" in html_text and "<table" not in html_text:
+        return []
+
+    features = []
+
+    class _TableParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.in_td = False
+            self.td_class = ""
+            self.current_key = ""
+            self.current_value = ""
+            self.current_feature: dict = {"_layer": "html", "_attributes": {}}
+            self.collecting = ""  # "key" or "value"
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "td":
+                attr_dict = dict(attrs)
+                cls = attr_dict.get("class", "")
+                if "titel" in cls:
+                    self.in_td = True
+                    self.collecting = "key"
+                    self.current_key = ""
+                elif "wert" in cls:
+                    self.in_td = True
+                    self.collecting = "value"
+                    self.current_value = ""
+            elif tag == "table":
+                # New table = potentially new feature
+                if self.current_feature["_attributes"]:
+                    features.append(self.current_feature)
+                    self.current_feature = {"_layer": "html", "_attributes": {}}
+
+        def handle_endtag(self, tag):
+            if tag == "td" and self.in_td:
+                self.in_td = False
+                if self.collecting == "value" and self.current_key:
+                    val = self.current_value.strip()
+                    key = self.current_key.strip()
+                    if val and val.lower() not in ("null", "none", ""):
+                        self.current_feature["_attributes"][key] = val
+                    self.current_key = ""
+                    self.current_value = ""
+                self.collecting = ""
+            elif tag == "table":
+                if self.current_feature["_attributes"]:
+                    features.append(self.current_feature)
+                    self.current_feature = {"_layer": "html", "_attributes": {}}
+
+        def handle_data(self, data):
+            if self.in_td:
+                if self.collecting == "key":
+                    self.current_key += data
+                elif self.collecting == "value":
+                    self.current_value += data
+
+    try:
+        parser = _TableParser()
+        parser.feed(html_text)
+        # Capture last feature if any
+        if parser.current_feature["_attributes"]:
+            features.append(parser.current_feature)
+    except Exception:
+        pass
 
     return features
 

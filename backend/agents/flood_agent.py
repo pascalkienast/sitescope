@@ -137,13 +137,20 @@ class FloodAgent(BaseAgent):
                 raw_data=raw[:500],
             )
 
-        elif "starkregen" in layer_name.lower():
-            severity = "extreme" if "extrem" in layer_name else "rare"
-            risk = RiskLevel.HIGH if severity == "extreme" else RiskLevel.MEDIUM
+        elif "starkregen" in layer_name.lower() or layer_name.lower() in ("senken_aufstau", "fliesswege"):
+            if layer_name.lower() == "senken_aufstau":
+                severity = "terrain depressions & ponding"
+                risk = RiskLevel.MEDIUM
+            elif layer_name.lower() == "fliesswege":
+                severity = "flow paths during heavy rain"
+                risk = RiskLevel.MEDIUM
+            else:
+                severity = "extreme" if "extrem" in layer_name else "rare"
+                risk = RiskLevel.HIGH if severity == "extreme" else RiskLevel.MEDIUM
             return AgentFinding(
-                title=f"Surface Runoff Risk ({severity} heavy rain)",
+                title=f"Surface Runoff Risk ({severity})",
                 description=(
-                    f"Location shows surface runoff risk during {severity} heavy rain events. "
+                    f"Location shows surface runoff risk: {severity}. "
                     "Flash flood potential from pluvial flooding independent of rivers."
                 ),
                 risk_level=risk,

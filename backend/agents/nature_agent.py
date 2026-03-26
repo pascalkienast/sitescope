@@ -38,7 +38,7 @@ NATURE_LAYER_META = {
         "risk": RiskLevel.MEDIUM,
         "emoji": "🏞️",
     },
-    "natura2000_ffh": {
+    "fauna_flora_habitat_gebiet": {
         "title": "Natura 2000 FFH Habitat",
         "description": (
             "Location is within a Fauna-Flora-Habitat (FFH) area under EU Habitats Directive. "
@@ -48,7 +48,7 @@ NATURE_LAYER_META = {
         "risk": RiskLevel.HIGH,
         "emoji": "🦎",
     },
-    "natura2000_spa": {
+    "vogelschutzgebiet": {
         "title": "Natura 2000 Bird Protection Area (SPA)",
         "description": (
             "Location is within a Special Protection Area (SPA) under EU Birds Directive. "
@@ -57,8 +57,8 @@ NATURE_LAYER_META = {
         "risk": RiskLevel.HIGH,
         "emoji": "🐦",
     },
-    "geotopflaeche": {
-        "title": "Geotope (Area)",
+    "geotoplage": {
+        "title": "Geotope",
         "description": (
             "Location overlaps with a registered geotope — a geologically significant area. "
             "These are protected under BayNatSchG. Excavation and construction may be restricted."
@@ -66,16 +66,7 @@ NATURE_LAYER_META = {
         "risk": RiskLevel.MEDIUM,
         "emoji": "🪨",
     },
-    "geotoppunkt": {
-        "title": "Geotope (Point Feature)",
-        "description": (
-            "A registered geotope point feature is near this location. "
-            "May require consideration in planning but less restrictive than area geotopes."
-        ),
-        "risk": RiskLevel.LOW,
-        "emoji": "📍",
-    },
-    "trinkwasserschutzgebiet": {
+    "twsg": {
         "title": "Drinking Water Protection Zone",
         "description": (
             "Location is within a Trinkwasserschutzgebiet. "
@@ -85,11 +76,11 @@ NATURE_LAYER_META = {
         "risk": RiskLevel.HIGH,
         "emoji": "💧",
     },
-    "bodenschaetzung": {
-        "title": "Soil Assessment Data Available",
+    "bfk25_nat_ertragsfaehigkeit_gesamt": {
+        "title": "Soil Function Data (Natural Yield)",
         "description": (
-            "Official Bodenschätzung data is available for this location. "
-            "Contains soil quality information relevant for foundation planning "
+            "Bodenfunktionskarte data available for this location. "
+            "Shows natural yield capacity of the soil, relevant for foundation planning "
             "and agricultural land valuation."
         ),
         "risk": RiskLevel.LOW,

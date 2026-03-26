@@ -11,7 +11,7 @@ from typing import Optional
 import httpx
 
 from .transforms import make_bbox, wgs84_to_utm32
-from .parsers import parse_text_feature_info, parse_gml_feature_info
+from .parsers import parse_text_feature_info, parse_gml_feature_info, parse_html_feature_info
 from config import DEFAULT_CRS, DEFAULT_INFO_FORMAT, DEFAULT_TILE_SIZE, DEFAULT_BUFFER_M
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,10 @@ class WMSClient:
             params["I"] = str(pixel_x)
             params["J"] = str(pixel_y)
 
+        # STYLES param is required by many ArcGIS WMS servers (400 without it)
+        if "STYLES" not in params:
+            params["STYLES"] = ""
+
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # === DEBUG: Log full request URL ===
@@ -112,6 +116,8 @@ class WMSClient:
                 # Parse based on format
                 if "gml" in info_format.lower() or "xml" in info_format.lower():
                     features = parse_gml_feature_info(raw)
+                elif "html" in info_format.lower():
+                    features = parse_html_feature_info(raw)
                 else:
                     features = parse_text_feature_info(raw)
 

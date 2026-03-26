@@ -44,10 +44,8 @@ WMS_FLOOD = {
     "ueberschwemmungsgebiete": {
         "url": "https://www.lfu.bayern.de/gdi/wms/wasser/ueberschwemmungsgebiete",
         "layers": [
-            "hwgf_uesg_hq100",
-            "hwgf_uesg_hqextrem",
-            "vwgf_uesg_hq100",
-            "vwgf_uesg_hqextrem",
+            "hwgf_hq100",
+            "hwgf_hqextrem",
         ],
         "description": "Überschwemmungsgebiete (HQ100 / HQextrem)",
     },
@@ -59,8 +57,8 @@ WMS_FLOOD = {
     "oberflaechenabfluss": {
         "url": "https://www.lfu.bayern.de/gdi/wms/wasser/oberflaechenabfluss",
         "layers": [
-            "oa_starkregen_selten",
-            "oa_starkregen_extrem",
+            "senken_aufstau",
+            "fliesswege",
         ],
         "description": "Oberflächenabfluss bei Starkregen",
     },
@@ -73,25 +71,25 @@ WMS_NATURE = {
         "layers": [
             "naturschutzgebiet",
             "landschaftsschutzgebiet",
-            "natura2000_ffh",
-            "natura2000_spa",
+            "fauna_flora_habitat_gebiet",
+            "vogelschutzgebiet",
         ],
         "description": "NSG, LSG, Natura 2000 FFH & Vogelschutz",
     },
     "geotope": {
         "url": "https://www.lfu.bayern.de/gdi/wms/geologie/geotope",
-        "layers": ["geotopflaeche", "geotoppunkt"],
-        "description": "Geotope (Flächen und Punkte)",
+        "layers": ["geotoplage"],
+        "description": "Geotope",
     },
     "trinkwasserschutz": {
-        "url": "https://www.lfu.bayern.de/gdi/wms/wasser/trinkwasserschutzgebiete",
-        "layers": ["trinkwasserschutzgebiet"],
+        "url": "https://www.lfu.bayern.de/gdi/wms/wasser/wsg",
+        "layers": ["twsg"],
         "description": "Trinkwasserschutzgebiete",
     },
-    "bodenschaetzung": {
-        "url": "https://www.lfu.bayern.de/gdi/wms/boden/bodenschaetzung",
-        "layers": ["bodenschaetzung"],
-        "description": "Bodenschätzung",
+    "bodenfunktion": {
+        "url": "https://www.lfu.bayern.de/gdi/wms/boden/bfk25",
+        "layers": ["bfk25_nat_ertragsfaehigkeit_gesamt"],
+        "description": "Bodenfunktionskarte (natürliche Ertragsfähigkeit)",
     },
 }
 
@@ -115,7 +113,9 @@ DEFAULT_CRS = "EPSG:25832"
 MAP_CRS = "EPSG:4326"
 
 # GetFeatureInfo parameters
-DEFAULT_INFO_FORMAT = "text/plain"
+# NOTE: text/plain returns HTTP 400 on many Bayern LfU ArcGIS WMS services.
+# text/html works universally across all tested endpoints.
+DEFAULT_INFO_FORMAT = "text/html"
 GML_INFO_FORMAT = "application/vnd.ogc.gml"
 
 # Default map tile size for GetMap/GetFeatureInfo
