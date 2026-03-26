@@ -255,6 +255,83 @@ WMS_DIAGNOSTIC_SOURCE_GROUPS = WMS_AGENT_SOURCE_GROUPS + (
     ("Flood", WMS_MONITORING_ONLY),
 )
 
+# =============================================================================
+# RLP (Rheinland-Pfalz) Configuration
+# =============================================================================
+
+RLP_BBOX = {
+    "lat_min": 48.9,
+    "lat_max": 51.0,
+    "lng_min": 6.0,
+    "lng_max": 8.5,
+}
+
+RLP_TEST_LAT = 50.353
+RLP_TEST_LNG = 7.597
+
+RLP_EPSG25832_X = 402000.0
+RLP_EPSG25832_Y = 5580000.0
+
+WMS_RLP_LAND_VALUES = {
+    "boris_rlp": _wms_service(
+        "https://geo5.service24.rlp.de/wms/RLP_VBORISFREE2026.fcgi?",
+        "VBORIS RLP Bodenrichtwerte (Land Values)",
+        ["Bodenrichtwerte_Basis_RLP", "RLP_1", "RLP_0"],
+        version="1.1.1",
+        crs="EPSG:25832",
+        info_format=GML_INFO_FORMAT,
+    ),
+}
+
+WMS_RLP_HERITAGE = {
+    "denkmal_rlp": _wms_service(
+        "https://www.geoportal.rlp.de/owsproxy/00000000000000000000000000000000/9c9d7fe2c25527a5cb22cf9ca2266d26?",
+        "GDKE RLP Denkmalkartierung (Heritage)",
+        ["pgis_landesdenkmalpflege_sld", "denkmalzonen", "bga", "edm_flaechen", "edm_linien", "edm_punkte"],
+        version="1.1.1",
+        crs="EPSG:25832",
+        info_format=GML_INFO_FORMAT,
+    ),
+}
+
+WMS_RLP_NATURE = {
+    "schutzgebiete_inspire": _wms_service(
+        "https://inspire.naturschutz.rlp.de/cgi-bin/wfs/ps_wms?language=ger&",
+        "INSPIRE Schutzgebiete RLP (Nature) - monitoring only, no GetFeatureInfo",
+        ["PS.ProtectedSitesSpecialAreaOfConservation"],
+        version="1.1.1",
+        crs="EPSG:4326",
+        info_format=GML_INFO_FORMAT,
+        probe="get_map",
+    ),
+}
+
+WMS_RLP_FLOOD = {
+    "ueberschwemmungsgebiete_rlp": _wms_service(
+        "https://geodienste-wasser.rlp-umwelt.de/maps/uesg/wms?",
+        "RLP Gesetzlich festgesetzte Überschwemmungsgebiete",
+        ["risikogebiete_ausserhalb_uesg"],
+        version="1.1.1",
+        crs="EPSG:4326",
+        info_format=GML_INFO_FORMAT,
+    ),
+    "hochwassergefahrenkarte_rlp": _wms_service(
+        "https://geodienste-wasser.rlp-umwelt.de/maps/HWGK/wms?",
+        "RLP Hochwassergefahrenkarte (HQ100 depths)",
+        ["Ueberflutungsflaechen_HQ_100"],
+        version="1.1.1",
+        crs="EPSG:4326",
+        info_format=GML_INFO_FORMAT,
+    ),
+}
+
+WMS_RLP_DIAGNOSTIC_SOURCE_GROUPS = (
+    ("RLP-LandValues", WMS_RLP_LAND_VALUES),
+    ("RLP-Heritage", WMS_RLP_HERITAGE),
+    ("RLP-Nature", WMS_RLP_NATURE),
+    ("RLP-Flood", WMS_RLP_FLOOD),
+)
+
 # Demo locations for the hackathon
 DEMO_LOCATIONS = [
     {

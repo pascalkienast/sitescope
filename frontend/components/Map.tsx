@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import maplibregl from "maplibre-gl";
+import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import type { DemoLocation } from "@/lib/types";
+import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 
 interface MapProps {
-  onClick: (lat: number, lng: number) => void;
+  onClick: (lat: number, lng: number, polygon?: [number, number][]) => void;
   selectedCoords: { lat: number; lng: number } | null;
   demoLocations: DemoLocation[];
 }
@@ -40,7 +42,10 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
 export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const drawRef = useRef<MapboxDraw | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const [drawMode, setDrawMode] = useState(false);
+  const [hasPolygon, setHasPolygon] = useState(false);
 
   // Initialize map
   useEffect(() => {
@@ -53,6 +58,44 @@ export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
       zoom: DEFAULT_ZOOM,
     });
 
+    // Initialize draw control
+    const Draw = new MapboxDraw({
+      displayControlsDefault: false,
+      defaultMode: "simple_select",
+      styles: [
+        {
+          id: "gl-draw-polygon-fill",
+          type: "fill",
+          filter: ["all", ["==", "$type", "Polygon"]],
+          paint: {
+            "fill-color": "#3B82F6",
+            "fill-opacity": 0.2,
+          },
+        },
+        {
+          id: "gl-draw-polygon-stroke",
+          type: "line",
+          filter: ["all", ["==", "$type", "Polygon"]],
+          paint: {
+            "line-color": "#3B82F6",
+            "line-width": 2,
+          },
+        },
+        {
+          id: "gl-draw-polygon-vertex",
+          type: "circle",
+          filter: ["all", ["==", "$type", "Point"], ["==", "meta", "vertex"]],
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#3B82F6",
+            "circle-stroke-color": "#fff",
+            "circle-stroke-width": 2,
+          },
+        },
+      ],
+    });
+
+    map.addControl(Draw as unknown as maplibregl.IControl, "top-left");
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.addControl(
       new maplibregl.GeolocateControl({
@@ -63,20 +106,78 @@ export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
     );
 
     mapRef.current = map;
+    drawRef.current = Draw;
+
+    // Handle polygon creation
+    map.on("draw.create", (e) => {
+      const features = e.features;
+      if (features && features.length > 0) {
+        const polygon = features[0];
+        if (polygon.geometry && polygon.geometry.type === "Polygon") {
+          const coords = polygon.geometry.coordinates[0] as [number, number][];
+          setHasPolygon(true);
+
+          // Calculate centroid of polygon
+          const centroid = calculateCentroid(coords);
+          onClick(centroid.lat, centroid.lng, coords);
+        }
+      }
+    });
+
+    // Handle polygon deletion
+    map.on("draw.delete", () => {
+      setHasPolygon(false);
+    });
 
     return () => {
       map.remove();
       mapRef.current = null;
+      drawRef.current = null;
     };
   }, []);
 
-  // Handle map clicks
+  // Handle draw mode toggle
+  const toggleDrawMode = useCallback(() => {
+    const draw = drawRef.current;
+    if (!draw) return;
+
+    if (drawMode) {
+      draw.changeMode("simple_select");
+      setDrawMode(false);
+    } else {
+      draw.changeMode("draw_polygon");
+      setDrawMode(true);
+    }
+  }, [drawMode]);
+
+  // Clear polygon
+  const clearPolygon = useCallback(() => {
+    const draw = drawRef.current;
+    if (!draw) return;
+
+    draw.deleteAll();
+    setHasPolygon(false);
+    setDrawMode(false);
+  }, []);
+
+  // Handle map clicks (only when not in draw mode)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     const handleClick = (e: maplibregl.MapMouseEvent) => {
+      // Don't handle click if in draw mode
+      if (drawMode) return;
+
       const { lat, lng } = e.lngLat;
+
+      // Clear any existing polygon first
+      const draw = drawRef.current;
+      if (draw) {
+        draw.deleteAll();
+        setHasPolygon(false);
+      }
+
       onClick(lat, lng);
     };
 
@@ -84,7 +185,7 @@ export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
     return () => {
       map.off("click", handleClick);
     };
-  }, [onClick]);
+  }, [onClick, drawMode]);
 
   // Update marker on selected coords
   useEffect(() => {
@@ -159,6 +260,12 @@ export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
 
       el.addEventListener("click", (e) => {
         e.stopPropagation();
+        // Clear any existing polygon first
+        const draw = drawRef.current;
+        if (draw) {
+          draw.deleteAll();
+          setHasPolygon(false);
+        }
         onClick(loc.lat, loc.lng);
       });
 
@@ -175,6 +282,63 @@ export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
   }, [demoLocations, onClick]);
 
   return (
-    <div ref={containerRef} className="w-full h-full" />
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+
+      {/* Draw mode controls */}
+      <div className="absolute top-3 left-3 z-10 flex gap-2">
+        <button
+          onClick={toggleDrawMode}
+          className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
+            drawMode
+              ? "bg-blue-600 text-white"
+              : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
+          }`}
+          title={drawMode ? "Cancel drawing" : "Draw polygon"}
+        >
+          {drawMode ? "Cancel" : "Draw Area"}
+        </button>
+
+        {hasPolygon && (
+          <button
+            onClick={clearPolygon}
+            className="px-3 py-1.5 text-sm font-medium rounded-lg bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 transition-all"
+            title="Clear polygon"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {/* Mode indicator */}
+      {drawMode && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-blue-600 text-white text-sm px-4 py-1.5 rounded-full shadow-lg">
+          Click to add points, double-click to finish
+        </div>
+      )}
+
+      {/* Polygon info */}
+      {hasPolygon && !drawMode && (
+        <div className="absolute bottom-3 left-3 z-10 bg-blue-50 text-blue-800 text-sm px-3 py-2 rounded-lg border border-blue-200 shadow">
+          Analyzing polygon area
+        </div>
+      )}
+    </div>
   );
+}
+
+function calculateCentroid(coords: [number, number][]): { lat: number; lng: number } {
+  let latSum = 0;
+  let lngSum = 0;
+  const n = coords.length;
+
+  for (const [lng, lat] of coords) {
+    latSum += lat;
+    lngSum += lng;
+  }
+
+  return {
+    lat: latSum / n,
+    lng: lngSum / n,
+  };
 }

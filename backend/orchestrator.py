@@ -8,8 +8,12 @@ the combined output to the report generator.
 import asyncio
 import logging
 import time
+from typing import Optional
 
 from agents import FloodAgent, NatureAgent, HeritageAgent, ZoningAgent, InfraAgent
+from agents.rlp_agents import (
+    RLPFloodAgent, RLPNatureAgent, RLPHeritageAgent, RLPLandValueAgent
+)
 from models import AgentResult, AnalyzeResponse
 from report_generator import ReportGenerator
 from config import get_settings
@@ -17,21 +21,40 @@ from config import get_settings
 logger = logging.getLogger(__name__)
 
 # MVP agents (always run)
-MVP_AGENTS = [FloodAgent, NatureAgent, HeritageAgent]
+BAVARIA_MVP_AGENTS = [FloodAgent, NatureAgent, HeritageAgent]
 # Stretch agents (run if time allows)
-STRETCH_AGENTS = [ZoningAgent, InfraAgent]
+BAVARIA_STRETCH_AGENTS = [ZoningAgent, InfraAgent]
+
+# RLP agents
+RLP_MVP_AGENTS = [RLPFloodAgent, RLPNatureAgent, RLPHeritageAgent, RLPLandValueAgent]
 
 
 class Orchestrator:
     """Dispatches analysis agents and assembles the final report."""
 
-    def __init__(self, include_stretch: bool = True):
+    def __init__(self, include_stretch: bool = True, region: str = "BAVARIA"):
         settings = get_settings()
         self.wms_timeout = settings.wms_timeout
         self.include_stretch = include_stretch
+        self.region = region
         self.report_generator = ReportGenerator()
 
-    async def analyze(self, lat: float, lng: float) -> AnalyzeResponse:
+    def _get_agent_classes(self) -> list:
+        """Get the appropriate agent classes based on region."""
+        if self.region == "RLP":
+            return RLP_MVP_AGENTS
+        else:
+            agent_classes = list(BAVARIA_MVP_AGENTS)
+            if self.include_stretch:
+                agent_classes.extend(BAVARIA_STRETCH_AGENTS)
+            return agent_classes
+
+    async def analyze(
+        self,
+        lat: float,
+        lng: float,
+        polygon: Optional[list[list[float]]] = None
+    ) -> AnalyzeResponse:
         """
         Run full site analysis for a given coordinate.
 
@@ -43,19 +66,20 @@ class Orchestrator:
         start = time.monotonic()
 
         # Build agent list
-        agent_classes = list(MVP_AGENTS)
-        if self.include_stretch:
-            agent_classes.extend(STRETCH_AGENTS)
-
+        agent_classes = self._get_agent_classes()
         agents = [cls(wms_timeout=self.wms_timeout) for cls in agent_classes]
 
+        polygon_str = ""
+        if polygon:
+            polygon_str = f" (polygon with {len(polygon)} points)"
+        
         logger.info(
-            "Starting analysis at (%.4f, %.4f) with %d agents",
-            lat, lng, len(agents),
+            "Starting %s analysis at (%.4f, %.4f)%s with %d agents",
+            self.region, lat, lng, polygon_str, len(agents),
         )
 
         # Run all agents concurrently
-        tasks = [agent.analyze(lat, lng) for agent in agents]
+        tasks = [agent.analyze(lat, lng, polygon) for agent in agents]
         agent_results: list[AgentResult] = await asyncio.gather(
             *tasks, return_exceptions=True
         )
@@ -76,7 +100,7 @@ class Orchestrator:
 
         logger.info(
             "All agents completed in %dms: %d results, %d errors",
-            int((time.monotonic() - start) * 1000),
+            int((time.monotonic() - start) * 1003),
             len(clean_results),
             len(errors),
         )

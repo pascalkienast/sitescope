@@ -39,12 +39,20 @@ class AnalyzeRequest(BaseModel):
     """Request body for /analyze endpoint."""
     lat: float = Field(..., ge=-90, le=90, description="Latitude (WGS84)")
     lng: float = Field(..., ge=-180, le=180, description="Longitude (WGS84)")
+    polygon: Optional[list[list[float]]] = Field(
+        None,
+        description="Optional polygon coordinates as [[lng, lat], [lng, lat], ...] in WGS84"
+    )
 
 
 class PDFRequest(BaseModel):
     """Request body for /report/pdf endpoint."""
     lat: float = Field(..., ge=-90, le=90)
     lng: float = Field(..., ge=-180, le=180)
+    polygon: Optional[list[list[float]]] = Field(
+        None,
+        description="Optional polygon coordinates as [[lng, lat], [lng, lat], ...] in WGS84"
+    )
 
 
 # =============================================================================

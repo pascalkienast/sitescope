@@ -8,9 +8,11 @@ relevant WMS/WFS services and returns structured findings.
 import time
 import logging
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from models import AgentResult, AgentFinding, AgentCategory, RiskLevel
 from geo.wms_client import WMSClient
+from geo.wfs_client import WFSClient
 from geo.parsers import (
     build_parsed_raw_data,
     make_original_raw_response_preview,
@@ -19,6 +21,26 @@ from geo.parsers import (
 from config import DEFAULT_CRS, DEFAULT_WMS_VERSION
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_centroid(polygon: list[list[float]]) -> tuple[float, float]:
+    """
+    Calculate the centroid of a polygon.
+
+    Args:
+        polygon: List of [lng, lat] coordinates
+
+    Returns:
+        (lat, lng) tuple
+    """
+    if not polygon:
+        return 0.0, 0.0
+
+    lat_sum = sum(coord[1] for coord in polygon)
+    lng_sum = sum(coord[0] for coord in polygon)
+    n = len(polygon)
+
+    return lat_sum / n, lng_sum / n
 
 
 class BaseAgent(ABC):
@@ -31,12 +53,22 @@ class BaseAgent(ABC):
         self.wms_timeout = wms_timeout
         self.layers_queried = 0
 
-    async def analyze(self, lat: float, lng: float) -> AgentResult:
+    async def analyze(
+        self,
+        lat: float,
+        lng: float,
+        polygon: Optional[list[list[float]]] = None
+    ) -> AgentResult:
         """
         Run the full analysis for a location.
 
         Handles timing, error catching, and result assembly.
         Subclasses implement _run_analysis().
+
+        Args:
+            lat: Latitude
+            lng: Longitude
+            polygon: Optional polygon coordinates as [[lng, lat], ...]
         """
         start = time.monotonic()
         result = AgentResult(
@@ -45,8 +77,14 @@ class BaseAgent(ABC):
         )
 
         try:
-            logger.debug("Agent %s starting analysis for (%.4f, %.4f)", self.agent_name, lat, lng)
-            findings = await self._run_analysis(lat, lng)
+            polygon_str = ""
+            if polygon:
+                polygon_str = f" (polygon with {len(polygon)} points)"
+            logger.debug(
+                "Agent %s starting analysis for (%.4f, %.4f)%s",
+                self.agent_name, lat, lng, polygon_str
+            )
+            findings = await self._run_analysis(lat, lng, polygon)
             result.findings = findings
             result.layers_queried = self.layers_queried
             result.layers_with_data = sum(1 for f in findings if f.evidence)
@@ -75,11 +113,22 @@ class BaseAgent(ABC):
         return result
 
     @abstractmethod
-    async def _run_analysis(self, lat: float, lng: float) -> list[AgentFinding]:
+    async def _run_analysis(
+        self,
+        lat: float,
+        lng: float,
+        polygon: Optional[list[list[float]]] = None,
+    ) -> list[AgentFinding]:
         """
         Execute the actual analysis. Subclasses override this.
 
-        Returns a list of AgentFindings from querying relevant services.
+        Args:
+            lat: Latitude
+            lng: Longitude
+            polygon: Optional polygon coordinates as [[lng, lat], ...]
+
+        Returns:
+            A list of AgentFindings from querying relevant services.
         """
         ...
 
@@ -144,3 +193,16 @@ class BaseAgent(ABC):
                 max_fields_per_block=10,
             ),
         }
+
+    def _create_wfs_client(
+        self,
+        base_url: str,
+        *,
+        version: str = "1.1.0",
+    ) -> WFSClient:
+        """Create a WFS client configured for polygon queries."""
+        return WFSClient(
+            base_url=base_url,
+            timeout=self.wms_timeout,
+            version=version,
+        )

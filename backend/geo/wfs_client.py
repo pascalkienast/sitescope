@@ -132,6 +132,106 @@ class WFSClient:
 
         return features
 
+    async def query_polygon(
+        self,
+        polygon: list[list[float]],
+        type_names: list[str],
+        max_features: int = 100,
+    ) -> dict:
+        """
+        Query features that intersect with a polygon.
+
+        Args:
+            polygon: List of [lng, lat] coordinates defining the polygon
+            type_names: WFS feature type names
+            max_features: Maximum features to return
+
+        Returns:
+            Dict with 'features', 'raw_response', 'has_data', 'error'
+        """
+        coords_str = " ".join(
+            f"{lng} {lat}" for lng, lat in polygon
+        )
+
+        filter_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<wfs:GetFeature xmlns:wfs="http://www.opengis.net/wfs"
+    xmlns:ogc="http://www.opengis.net/ogc"
+    xmlns:gml="http://www.opengis.net/gml"
+    version="{self.version}">
+    <wfs:Query typeNames="{','.join(type_names)}">
+        <ogc:Filter>
+            <ogc:Intersects>
+                <ogc:PropertyName>SHAPE</ogc:PropertyName>
+                <gml:Polygon>
+                    <gml:exterior>
+                        <gml:LinearRing>
+                            <gml:posList>{coords_str}</gml:posList>
+                        </gml:LinearRing>
+                    </gml:exterior>
+                </gml:Polygon>
+            </ogc:Intersects>
+        </ogc:Filter>
+    </wfs:Query>
+</wfs:GetFeature>"""
+
+        type_key = "TYPENAMES" if self.version >= "2.0.0" else "TYPENAME"
+        count_key = "COUNT" if self.version >= "2.0.0" else "MAXFEATURES"
+
+        params = {
+            "SERVICE": "WFS",
+            "VERSION": self.version,
+            "REQUEST": "GetFeature",
+            count_key: str(max_features),
+            "OUTPUTFORMAT": "application/gml+xml; version=3.2",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                logger.debug("WFS POLYGON REQUEST: POST %s", self.base_url)
+                response = await client.post(
+                    self.base_url,
+                    content=filter_xml,
+                    params=params,
+                    headers={
+                        "Content-Type": "application/xml",
+                        "Accept": "application/gml+xml, text/xml",
+                    },
+                )
+                response.raise_for_status()
+
+                raw = response.text
+                logger.debug(
+                    "WFS RESPONSE: %d bytes, status=%d",
+                    len(raw),
+                    response.status_code,
+                )
+
+                features = self._parse_wfs_response(raw)
+
+                return {
+                    "features": features,
+                    "raw_response": raw,
+                    "has_data": len(features) > 0,
+                    "error": None,
+                }
+
+        except httpx.TimeoutException:
+            logger.warning("Timeout querying WFS polygon %s", self.base_url)
+            return {
+                "features": [],
+                "raw_response": "",
+                "has_data": False,
+                "error": f"WFS timeout after {self.timeout}s",
+            }
+        except Exception as e:
+            logger.exception("WFS polygon query error for %s", self.base_url)
+            return {
+                "features": [],
+                "raw_response": "",
+                "has_data": False,
+                "error": f"WFS error: {type(e).__name__}: {e}",
+            }
+
 
 def _local_name(tag: str) -> str:
     """Strip namespace from an XML tag."""

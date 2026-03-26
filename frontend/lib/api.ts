@@ -12,12 +12,18 @@ const API_BASE =
  */
 export async function analyzeSite(
   lat: number,
-  lng: number
+  lng: number,
+  polygon?: [number, number][]
 ): Promise<AnalyzeResponse> {
+  const body: { lat: number; lng: number; polygon?: [number, number][] } = { lat, lng };
+  if (polygon && polygon.length >= 3) {
+    body.polygon = polygon;
+  }
+
   const res = await fetch(`${API_BASE}/api/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lat, lng }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -32,11 +38,20 @@ export async function analyzeSite(
  * Download PDF report for a coordinate.
  * Returns a Blob that can be saved as a file.
  */
-export async function downloadPDF(lat: number, lng: number): Promise<Blob> {
+export async function downloadPDF(
+  lat: number,
+  lng: number,
+  polygon?: [number, number][]
+): Promise<Blob> {
+  const body: { lat: number; lng: number; polygon?: [number, number][] } = { lat, lng };
+  if (polygon && polygon.length >= 3) {
+    body.polygon = polygon;
+  }
+
   const res = await fetch(`${API_BASE}/api/report/pdf`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lat, lng }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

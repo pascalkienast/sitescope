@@ -106,6 +106,22 @@ def _is_in_bavaria(lat: float, lng: float) -> bool:
     )
 
 
+RLP_BBOX = {
+    "lat_min": 48.9,
+    "lat_max": 51.0,
+    "lng_min": 6.0,
+    "lng_max": 8.5,
+}
+
+
+def _is_in_rlp(lat: float, lng: float) -> bool:
+    """Check whether a coordinate falls within RLP's bounding box."""
+    return (
+        RLP_BBOX["lat_min"] <= lat <= RLP_BBOX["lat_max"]
+        and RLP_BBOX["lng_min"] <= lng <= RLP_BBOX["lng_max"]
+    )
+
+
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest):
     """
@@ -114,26 +130,35 @@ async def analyze(request: AnalyzeRequest):
     Dispatches all agents in parallel, generates a Red Flag Report
     via LLM, and returns structured JSON.
     """
-    logger.info("Analyze request: (%.4f, %.4f)", request.lat, request.lng)
+    polygon_str = ""
+    if request.polygon:
+        polygon_str = f" (polygon with {len(request.polygon)} points)"
+    
+    logger.info("Analyze request: (%.4f, %.4f)%s", request.lat, request.lng, polygon_str)
 
-    # --- Bavaria boundary check ---
-    if not _is_in_bavaria(request.lat, request.lng):
+    # --- Region detection ---
+    region = None
+    if _is_in_bavaria(request.lat, request.lng):
+        region = "BAVARIA"
+    elif _is_in_rlp(request.lat, request.lng):
+        region = "RLP"
+
+    if region is None:
         logger.info(
-            "Rejected: (%.4f, %.4f) is outside Bavaria", request.lat, request.lng
+            "Rejected: (%.4f, %.4f) is outside supported regions", request.lat, request.lng
         )
         return AnalyzeResponse(
             success=False,
             report=None,
             agent_results=[],
             errors=[
-                f"Location ({request.lat:.4f}, {request.lng:.4f}) is outside Bavaria (Bayern). "
-                "SiteScope currently only supports locations within Bavaria, where our "
-                "geodata sources (Bayern LfU, BLfD) are available."
+                f"Location ({request.lat:.4f}, {request.lng:.4f}) is outside supported regions (Bavaria/Rheinland-Pfalz). "
+                "SiteScope currently supports locations within Bavaria and Rheinland-Pfalz."
             ],
         )
 
-    orchestrator = Orchestrator(include_stretch=True)
-    result = await orchestrator.analyze(request.lat, request.lng)
+    orchestrator = Orchestrator(include_stretch=True, region=region)
+    result = await orchestrator.analyze(request.lat, request.lng, request.polygon)
 
     if not result.success:
         logger.warning("Analysis had errors: %s", result.errors)
@@ -146,10 +171,26 @@ async def report_pdf(request: PDFRequest):
     """
     Run analysis and return the report as a downloadable PDF.
     """
-    logger.info("PDF report request: (%.4f, %.4f)", request.lat, request.lng)
+    polygon_str = ""
+    if request.polygon:
+        polygon_str = f" (polygon with {len(request.polygon)} points)"
+    logger.info("PDF report request: (%.4f, %.4f)%s", request.lat, request.lng, polygon_str)
 
-    orchestrator = Orchestrator(include_stretch=True)
-    result = await orchestrator.analyze(request.lat, request.lng)
+    # Determine region
+    region = None
+    if _is_in_bavaria(request.lat, request.lng):
+        region = "BAVARIA"
+    elif _is_in_rlp(request.lat, request.lng):
+        region = "RLP"
+
+    if region is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Location ({request.lat:.4f}, {request.lng:.4f}) is outside supported regions",
+        )
+
+    orchestrator = Orchestrator(include_stretch=True, region=region)
+    result = await orchestrator.analyze(request.lat, request.lng, request.polygon)
 
     if not result.report:
         raise HTTPException(

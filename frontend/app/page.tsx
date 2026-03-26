@@ -24,6 +24,7 @@ export default function Home() {
     lat: number;
     lng: number;
   } | null>(null);
+  const [selectedPolygon, setSelectedPolygon] = useState<[number, number][] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [demoLocations, setDemoLocations] = useState<DemoLocation[]>([]);
 
@@ -33,20 +34,21 @@ export default function Home() {
   }, []);
 
   const handleMapClick = useCallback(
-    async (lat: number, lng: number) => {
+    async (lat: number, lng: number, polygon?: [number, number][]) => {
       if (analyzing) return;
 
       setSelectedCoords({ lat, lng });
+      setSelectedPolygon(polygon || null);
       setAnalyzing(true);
       setError(null);
       setResult(null);
 
       try {
-        const response = await analyzeSite(lat, lng);
+        const response = await analyzeSite(lat, lng, polygon);
         // Check if backend returned a coverage-area error (success=false with errors)
         if (!response.success && response.errors?.length > 0) {
           const isCoverageError = response.errors.some(
-            (e) => e.includes("outside Bavaria") || e.includes("outside coverage")
+            (e) => e.includes("outside Bavaria") || e.includes("outside coverage") || e.includes("RLP")
           );
           if (isCoverageError) {
             setError(`__COVERAGE__${response.errors[0]}`);
@@ -136,7 +138,7 @@ export default function Home() {
                           {error.replace("__COVERAGE__", "")}
                         </p>
                         <p className="text-xs mt-3 text-amber-600">
-                          Try clicking a location within Bavaria on the map, or use one of the demo locations above.
+                          Try clicking a location within Bavaria or RLP on the map, or use one of the demo locations above.
                         </p>
                       </div>
                     </div>

@@ -49,7 +49,12 @@ class ZoningAgent(BaseAgent):
     category = AgentCategory.ZONING
     agent_name = "Zoning & Land Use Agent"
 
-    async def _run_analysis(self, lat: float, lng: float) -> list[AgentFinding]:
+    async def _run_analysis(
+        self,
+        lat: float,
+        lng: float,
+        polygon: Optional[list[list[float]]] = None,
+    ) -> list[AgentFinding]:
         findings = []
         total_layers = 0
 

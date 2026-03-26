@@ -9,6 +9,7 @@ Queries BLfD (Bayerisches Landesamt für Denkmalpflege) WMS for:
 """
 
 import logging
+from typing import Optional
 
 from .base import BaseAgent
 from models import AgentFinding, AgentCategory, RiskLevel
@@ -59,7 +60,12 @@ class HeritageAgent(BaseAgent):
     category = AgentCategory.HERITAGE
     agent_name = "Heritage / Monuments Agent"
 
-    async def _run_analysis(self, lat: float, lng: float) -> list[AgentFinding]:
+    async def _run_analysis(
+        self,
+        lat: float,
+        lng: float,
+        polygon: Optional[list[list[float]]] = None,
+    ) -> list[AgentFinding]:
         findings = []
         total_layers = 0
 

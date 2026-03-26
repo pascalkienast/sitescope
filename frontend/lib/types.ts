@@ -94,6 +94,18 @@ export interface DemoLocation {
   expected: string[];
 }
 
+export interface AnalyzeRequest {
+  lat: number;
+  lng: number;
+  polygon?: [number, number][];
+}
+
+export interface AnalyzeRequestWithPolygon {
+  lat: number;
+  lng: number;
+  polygon: [number, number][];
+}
+
 /** Risk level display metadata */
 export const RISK_META: Record<
   RiskLevel,
