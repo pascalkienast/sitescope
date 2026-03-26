@@ -12,7 +12,7 @@ import logging
 
 from .base import BaseAgent
 from models import AgentFinding, AgentCategory, RiskLevel
-from config import WMS_NATURE
+from config import DEFAULT_INFO_FORMAT, WMS_NATURE
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,15 @@ NATURE_LAYER_META = {
         "risk": RiskLevel.HIGH,
         "emoji": "💧",
     },
+    "hqsg": {
+        "title": "Healing Spring Protection Zone",
+        "description": (
+            "Location is within a Heilquellenschutzgebiet. "
+            "Groundwater interventions and construction measures are subject to strict water-law review."
+        ),
+        "risk": RiskLevel.HIGH,
+        "emoji": "💧",
+    },
     "bfk25_nat_ertragsfaehigkeit_gesamt": {
         "title": "Soil Function Data (Natural Yield)",
         "description": (
@@ -85,6 +94,69 @@ NATURE_LAYER_META = {
         ),
         "risk": RiskLevel.LOW,
         "emoji": "🟤",
+    },
+    "bio_abk": {
+        "title": "Protected Biotope",
+        "description": (
+            "Location overlaps with the Bavarian biotope register. "
+            "Protected biotopes trigger strong conservation constraints under nature protection law."
+        ),
+        "risk": RiskLevel.HIGH,
+        "emoji": "🌱",
+    },
+    "bio_sbk": {
+        "title": "Protected Urban Biotope",
+        "description": (
+            "Location overlaps with an urban biotope mapping entry. "
+            "Protected habitat structures can materially constrain redevelopment."
+        ),
+        "risk": RiskLevel.HIGH,
+        "emoji": "🌱",
+    },
+    "bio_fbk": {
+        "title": "Protected Lowland Biotope",
+        "description": (
+            "Location overlaps with a lowland biotope mapping entry. "
+            "Protected biotope status requires ecological compatibility review."
+        ),
+        "risk": RiskLevel.HIGH,
+        "emoji": "🌱",
+    },
+    "oefk_ankauf": {
+        "title": "Ecological Compensation Area",
+        "description": (
+            "Location overlaps with the Bavarian ecological compensation cadastre. "
+            "Compensation areas can restrict development or require offset coordination."
+        ),
+        "risk": RiskLevel.MEDIUM,
+        "emoji": "🌾",
+    },
+    "oefk_ae": {
+        "title": "Compensation / Replacement Area",
+        "description": (
+            "Location is registered as an Ausgleichs- oder Ersatzfläche. "
+            "Interventions typically require nature-conservation coordination."
+        ),
+        "risk": RiskLevel.MEDIUM,
+        "emoji": "🌾",
+    },
+    "oefk_flurb": {
+        "title": "Land Consolidation Eco Area",
+        "description": (
+            "Location is part of an ecological area from Flurbereinigung planning. "
+            "Land-use changes should be checked against compensation obligations."
+        ),
+        "risk": RiskLevel.MEDIUM,
+        "emoji": "🌾",
+    },
+    "oefk_oek": {
+        "title": "Eco Account Area",
+        "description": (
+            "Location is registered in the ecological compensation account. "
+            "Existing offset obligations may limit buildability or require coordination."
+        ),
+        "risk": RiskLevel.MEDIUM,
+        "emoji": "🌾",
     },
 }
 
@@ -98,11 +170,20 @@ class NatureAgent(BaseAgent):
         total_layers = 0
 
         for service_key, service_cfg in WMS_NATURE.items():
-            client = self._create_wms_client(service_cfg["url"])
+            client = self._create_wms_client(
+                service_cfg["url"],
+                version=service_cfg.get("version"),
+                crs=service_cfg.get("crs"),
+            )
             layers = service_cfg["layers"]
             total_layers += len(layers)
 
-            results = await client.query_all_layers_individually(lat, lng, layers)
+            results = await client.query_all_layers_individually(
+                lat,
+                lng,
+                layers,
+                info_format=service_cfg.get("info_format", DEFAULT_INFO_FORMAT),
+            )
 
             for layer_name, result in results.items():
                 if result.get("error"):

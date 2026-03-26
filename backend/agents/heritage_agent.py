@@ -12,7 +12,7 @@ import logging
 
 from .base import BaseAgent
 from models import AgentFinding, AgentCategory, RiskLevel
-from config import WMS_HERITAGE
+from config import DEFAULT_INFO_FORMAT, WMS_HERITAGE
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +64,20 @@ class HeritageAgent(BaseAgent):
         total_layers = 0
 
         for service_key, service_cfg in WMS_HERITAGE.items():
-            client = self._create_wms_client(service_cfg["url"])
+            client = self._create_wms_client(
+                service_cfg["url"],
+                version=service_cfg.get("version"),
+                crs=service_cfg.get("crs"),
+            )
             layers = service_cfg["layers"]
             total_layers += len(layers)
 
-            results = await client.query_all_layers_individually(lat, lng, layers)
+            results = await client.query_all_layers_individually(
+                lat,
+                lng,
+                layers,
+                info_format=service_cfg.get("info_format", DEFAULT_INFO_FORMAT),
+            )
 
             for layer_name, result in results.items():
                 if result.get("error"):
@@ -119,7 +128,10 @@ class HeritageAgent(BaseAgent):
 
         # Try to extract monument details
         file_number = self._extract_attr(features, ["aktennummer", "denkmalnummer", "nummer"])
-        name = self._extract_attr(features, ["kurzansprache", "name", "bezeichnung", "beschreibung"])
+        name = self._extract_attr(
+            features,
+            ["kurzansprache", "tradobjbez", "funktion", "name", "bezeichnung", "beschreibung"],
+        )
         address = self._extract_attr(features, ["adresse", "strasse", "ort"])
 
         title = meta["title"]

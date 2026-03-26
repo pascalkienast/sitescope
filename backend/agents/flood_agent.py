@@ -11,7 +11,7 @@ import logging
 
 from .base import BaseAgent
 from models import AgentFinding, AgentCategory, RiskLevel
-from config import WMS_FLOOD
+from config import DEFAULT_INFO_FORMAT, WMS_FLOOD
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +25,21 @@ class FloodAgent(BaseAgent):
         total_layers = 0
 
         for service_key, service_cfg in WMS_FLOOD.items():
-            client = self._create_wms_client(service_cfg["url"])
+            client = self._create_wms_client(
+                service_cfg["url"],
+                version=service_cfg.get("version"),
+                crs=service_cfg.get("crs"),
+            )
             layers = service_cfg["layers"]
             total_layers += len(layers)
 
             # Query each layer individually for precise attribution
-            results = await client.query_all_layers_individually(lat, lng, layers)
+            results = await client.query_all_layers_individually(
+                lat,
+                lng,
+                layers,
+                info_format=service_cfg.get("info_format", DEFAULT_INFO_FORMAT),
+            )
 
             for layer_name, result in results.items():
                 if result.get("error"):
@@ -103,6 +112,21 @@ class FloodAgent(BaseAgent):
                 raw_data=raw[:500],
             )
 
+        elif "hqhaeufig" in layer_name.lower():
+            return AgentFinding(
+                title="Frequent Flood Zone",
+                description=(
+                    "Location is within a frequent flood area (HQhäufig). "
+                    "Seasonal or recurrent flood exposure is likely."
+                ),
+                risk_level=RiskLevel.HIGH,
+                evidence=self._extract_evidence(features, raw),
+                source_url=service_cfg["url"],
+                source_name="Bayern LfU Überschwemmungsgebiete",
+                layer_name=layer_name,
+                raw_data=raw[:500],
+            )
+
         elif "wt_hq100" in layer_name.lower():
             depth = self._extract_depth(features)
             risk = RiskLevel.HIGH if depth and depth > 0.5 else RiskLevel.MEDIUM
@@ -121,6 +145,22 @@ class FloodAgent(BaseAgent):
                 raw_data=raw[:500],
             )
 
+        elif "wt_hqhaeufig" in layer_name.lower():
+            depth = self._extract_depth(features)
+            return AgentFinding(
+                title=f"Water Depth HQhäufig{f': {depth:.1f}m' if depth else ''}",
+                description=(
+                    f"Expected water depth during frequent flood events"
+                    f"{f': approximately {depth:.1f} meters' if depth else ' detected'}."
+                ),
+                risk_level=RiskLevel.HIGH,
+                evidence=self._extract_evidence(features, raw),
+                source_url=service_cfg["url"],
+                source_name="Bayern LfU Wassertiefen",
+                layer_name=layer_name,
+                raw_data=raw[:500],
+            )
+
         elif "wt_hqextrem" in layer_name.lower():
             depth = self._extract_depth(features)
             return AgentFinding(
@@ -128,6 +168,21 @@ class FloodAgent(BaseAgent):
                 description=(
                     f"Expected water depth at extreme flood event"
                     f"{f': approximately {depth:.1f} meters' if depth else ' detected'}."
+                ),
+                risk_level=RiskLevel.MEDIUM,
+                evidence=self._extract_evidence(features, raw),
+                source_url=service_cfg["url"],
+                source_name="Bayern LfU Wassertiefen",
+                layer_name=layer_name,
+                raw_data=raw[:500],
+            )
+
+        elif layer_name.lower() == "wt_hwgg_hq100":
+            depth = self._extract_depth(features)
+            return AgentFinding(
+                title=f"Water Depth Flood-Hazard Area{f': {depth:.1f}m' if depth else ''}",
+                description=(
+                    "Expected water depth inside mapped flood-hazard areas outside legally designated flood zones."
                 ),
                 risk_level=RiskLevel.MEDIUM,
                 evidence=self._extract_evidence(features, raw),
@@ -157,6 +212,26 @@ class FloodAgent(BaseAgent):
                 evidence=self._extract_evidence(features, raw),
                 source_url=service_cfg["url"],
                 source_name="Bayern LfU Oberflächenabfluss",
+                layer_name=layer_name,
+                raw_data=raw[:500],
+            )
+
+        elif layer_name.lower() in (
+            "ueberwachte_lawinenstriche",
+            "nicht_ueberwachte_lawinenstriche",
+        ):
+            monitored = layer_name.lower() == "ueberwachte_lawinenstriche"
+            return AgentFinding(
+                title="Avalanche Cadastre",
+                description=(
+                    "Location intersects the Bavarian avalanche cadastre. "
+                    f"{'A monitored avalanche track' if monitored else 'An unmonitored avalanche track'} "
+                    "is mapped at this location."
+                ),
+                risk_level=RiskLevel.HIGH if monitored else RiskLevel.MEDIUM,
+                evidence=self._extract_evidence(features, raw),
+                source_url=service_cfg["url"],
+                source_name="Bayern LfU Lawinenkataster",
                 layer_name=layer_name,
                 raw_data=raw[:500],
             )

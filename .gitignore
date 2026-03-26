@@ -8,6 +8,7 @@ __pycache__/
 *$py.class
 venv/
 .venv/
+.venv312/
 
 # Node
 node_modules/
@@ -25,3 +26,5 @@ Thumbs.db
 
 # Generated
 *.pdf
+
+.history/

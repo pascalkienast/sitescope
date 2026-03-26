@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 
 from models import AgentResult, AgentFinding, AgentCategory, RiskLevel
 from geo.wms_client import WMSClient
+from config import DEFAULT_CRS, DEFAULT_WMS_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class BaseAgent(ABC):
 
     def __init__(self, wms_timeout: int = 30):
         self.wms_timeout = wms_timeout
+        self.layers_queried = 0
 
     async def analyze(self, lat: float, lng: float) -> AgentResult:
         """
@@ -41,6 +43,7 @@ class BaseAgent(ABC):
             logger.debug("Agent %s starting analysis for (%.4f, %.4f)", self.agent_name, lat, lng)
             findings = await self._run_analysis(lat, lng)
             result.findings = findings
+            result.layers_queried = self.layers_queried
             result.layers_with_data = sum(1 for f in findings if f.evidence)
             result.risk_level = self._calculate_overall_risk(findings)
             result.summary = self._build_summary(findings)
@@ -104,6 +107,17 @@ class BaseAgent(ABC):
             parts.append(f"[{f.risk_level.value}] {f.title}: {f.description}")
         return " | ".join(parts)
 
-    def _create_wms_client(self, base_url: str) -> WMSClient:
+    def _create_wms_client(
+        self,
+        base_url: str,
+        *,
+        version: str | None = None,
+        crs: str | None = None,
+    ) -> WMSClient:
         """Create a WMS client configured for this agent."""
-        return WMSClient(base_url=base_url, timeout=self.wms_timeout)
+        return WMSClient(
+            base_url=base_url,
+            timeout=self.wms_timeout,
+            version=version or DEFAULT_WMS_VERSION,
+            crs=crs or DEFAULT_CRS,
+        )

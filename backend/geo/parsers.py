@@ -256,10 +256,13 @@ def _local_name(tag: str) -> str:
 
 def has_meaningful_data(features: list[dict]) -> bool:
     """Check if parsed features contain actual data (not just empty results)."""
+    placeholder_values = {"", "null", "none", "nan", "n/a", "na"}
     for f in features:
         attrs = f.get("_attributes", {})
-        if attrs:
-            return True
+        for value in attrs.values():
+            normalized = str(value).strip().lower()
+            if normalized not in placeholder_values:
+                return True
     return False
 
 

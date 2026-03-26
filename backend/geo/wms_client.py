@@ -5,14 +5,26 @@ Works with any OGC WMS 1.1.1 / 1.3.0 service. Designed for
 Bayern LfU and BLfD WMS endpoints but fully generic.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
 import httpx
 
-from .transforms import make_bbox, wgs84_to_utm32
-from .parsers import parse_text_feature_info, parse_gml_feature_info, parse_html_feature_info
-from config import DEFAULT_CRS, DEFAULT_INFO_FORMAT, DEFAULT_TILE_SIZE, DEFAULT_BUFFER_M
+from .transforms import make_bbox
+from .parsers import (
+    has_meaningful_data,
+    parse_gml_feature_info,
+    parse_html_feature_info,
+    parse_text_feature_info,
+)
+from config import (
+    DEFAULT_BUFFER_M,
+    DEFAULT_CRS,
+    DEFAULT_INFO_FORMAT,
+    DEFAULT_TILE_SIZE,
+    DEFAULT_WMS_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +36,7 @@ class WMSClient:
         self,
         base_url: str,
         timeout: int = 30,
-        version: str = "1.1.1",
+        version: str = DEFAULT_WMS_VERSION,
         crs: str = DEFAULT_CRS,
     ):
         self.base_url = base_url
@@ -93,7 +105,14 @@ class WMSClient:
             params["STYLES"] = ""
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=True,
+                headers={
+                    "Accept-Encoding": "identity",
+                    "User-Agent": "SiteScope/1.0",
+                },
+            ) as client:
                 # === DEBUG: Log full request URL ===
                 request_url = httpx.URL(self.base_url, params=params)
                 logger.debug("WMS REQUEST: GET %s", request_url)
@@ -124,7 +143,7 @@ class WMSClient:
                 return {
                     "features": features,
                     "raw_response": raw,
-                    "has_data": len(features) > 0,
+                    "has_data": has_meaningful_data(features),
                     "error": None,
                 }
 
@@ -196,7 +215,14 @@ class WMSClient:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=True,
+                headers={
+                    "Accept-Encoding": "identity",
+                    "User-Agent": "SiteScope/1.0",
+                },
+            ) as client:
                 response = await client.get(self.base_url, params=params)
                 response.raise_for_status()
 
@@ -232,14 +258,15 @@ class WMSClient:
         Returns:
             Dict mapping layer_name → GetFeatureInfo result
         """
-        results = {}
-        for layer in layers:
-            result = await self.get_feature_info(
+        tasks = [
+            self.get_feature_info(
                 lat=lat,
                 lng=lng,
                 layers=[layer],
                 info_format=info_format,
                 buffer_m=buffer_m,
             )
-            results[layer] = result
-        return results
+            for layer in layers
+        ]
+        resolved = await asyncio.gather(*tasks)
+        return {layer: result for layer, result in zip(layers, resolved)}

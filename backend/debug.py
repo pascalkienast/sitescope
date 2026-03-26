@@ -16,11 +16,10 @@ import httpx
 from fastapi import APIRouter
 
 from config import (
-    WMS_FLOOD,
-    WMS_NATURE,
-    WMS_HERITAGE,
+    DEFAULT_INFO_FORMAT,
+    DEFAULT_WMS_VERSION,
     OPENROUTER_BASE_URL,
-    DEFAULT_CRS,
+    WMS_DIAGNOSTIC_SOURCE_GROUPS,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +41,55 @@ def _bbox_25832() -> str:
     x, y = MUNICH_EPSG25832_X, MUNICH_EPSG25832_Y
     b = BBOX_BUFFER
     return f"{x - b},{y - b},{x + b},{y + b}"
+
+
+def _build_feature_info_params(svc: dict[str, Any], layer: str) -> dict[str, str]:
+    version = svc.get("version", DEFAULT_WMS_VERSION)
+    crs = svc.get("crs", "EPSG:25832")
+    params = {
+        "SERVICE": "WMS",
+        "REQUEST": "GetFeatureInfo",
+        "VERSION": version,
+        "LAYERS": layer,
+        "QUERY_LAYERS": layer,
+        "BBOX": _bbox_25832(),
+        "WIDTH": "256",
+        "HEIGHT": "256",
+        "INFO_FORMAT": svc.get("info_format", DEFAULT_INFO_FORMAT),
+        "FEATURE_COUNT": "10",
+        "STYLES": "",
+    }
+    if version == "1.1.1":
+        params["SRS"] = crs
+        params["X"] = "128"
+        params["Y"] = "128"
+    else:
+        params["CRS"] = crs
+        params["I"] = "128"
+        params["J"] = "128"
+    return params
+
+
+def _build_get_map_params(svc: dict[str, Any], layer: str) -> dict[str, str]:
+    version = svc.get("version", DEFAULT_WMS_VERSION)
+    crs = svc.get("crs", "EPSG:25832")
+    params = {
+        "SERVICE": "WMS",
+        "REQUEST": "GetMap",
+        "VERSION": version,
+        "LAYERS": layer,
+        "BBOX": _bbox_25832(),
+        "WIDTH": "256",
+        "HEIGHT": "256",
+        "FORMAT": "image/png",
+        "TRANSPARENT": "TRUE",
+        "STYLES": "",
+    }
+    if version == "1.1.1":
+        params["SRS"] = crs
+    else:
+        params["CRS"] = crs
+    return params
 
 
 async def _check_wms_service(
@@ -79,33 +127,34 @@ async def _check_wms_service(
             "WMS_Capabilities" in body or "WMT_MS_Capabilities" in body
         )
 
-        # 2) GetFeatureInfo on the first layer
+        # 2) GetFeatureInfo or GetMap on a representative layer
         test_layer = svc["layers"][0]
         result["layers_tested"] = [test_layer]
-        bbox = _bbox_25832()
-        gfi_params = {
-            "SERVICE": "WMS",
-            "REQUEST": "GetFeatureInfo",
-            "VERSION": "1.1.1",
-            "LAYERS": test_layer,
-            "QUERY_LAYERS": test_layer,
-            "SRS": DEFAULT_CRS,
-            "BBOX": bbox,
-            "WIDTH": "256",
-            "HEIGHT": "256",
-            "X": "128",
-            "Y": "128",
-            "INFO_FORMAT": "application/json",
-            "STYLES": "",
-        }
-        gfi_resp = await client.get(
-            svc["url"], params=gfi_params, timeout=CHECK_TIMEOUT
-        )
-        gfi_resp.raise_for_status()
-        gfi_text = gfi_resp.text[:800]
-        result["data_test_ok"] = True
-        # If server doesn't support JSON, it may return HTML/XML — that's still OK
-        result["sample_data"] = gfi_text.strip() if gfi_text.strip() else "(empty — no features at test point)"
+        probe = svc.get("probe", "feature_info")
+        if probe == "get_map":
+            map_resp = await client.get(
+                svc["url"],
+                params=_build_get_map_params(svc, test_layer),
+                timeout=CHECK_TIMEOUT,
+            )
+            map_resp.raise_for_status()
+            result["data_test_ok"] = "image" in map_resp.headers.get("content-type", "")
+            result["sample_data"] = (
+                f"{map_resp.headers.get('content-type', 'unknown')} "
+                f"({len(map_resp.content)} bytes)"
+            )
+        else:
+            gfi_resp = await client.get(
+                svc["url"],
+                params=_build_feature_info_params(svc, test_layer),
+                timeout=CHECK_TIMEOUT,
+            )
+            gfi_resp.raise_for_status()
+            gfi_text = gfi_resp.text[:800]
+            result["data_test_ok"] = True
+            result["sample_data"] = (
+                gfi_text.strip() if gfi_text.strip() else "(empty — no features at test point)"
+            )
 
     except Exception as exc:
         result["error"] = f"{type(exc).__name__}: {exc}"
@@ -244,12 +293,9 @@ async def debug_sources():
         # Build list of WMS check coroutines
         tasks: list[asyncio.Task] = []
 
-        for key, svc in WMS_FLOOD.items():
-            tasks.append(_check_wms_service(client, "Flood", key, svc))
-        for key, svc in WMS_NATURE.items():
-            tasks.append(_check_wms_service(client, "Nature", key, svc))
-        for key, svc in WMS_HERITAGE.items():
-            tasks.append(_check_wms_service(client, "Heritage", key, svc))
+        for category, services in WMS_DIAGNOSTIC_SOURCE_GROUPS:
+            for key, svc in services.items():
+                tasks.append(_check_wms_service(client, category, key, svc))
 
         # Non-WMS APIs
         tasks.append(_check_open_meteo(client))
