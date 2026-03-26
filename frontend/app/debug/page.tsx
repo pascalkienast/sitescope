@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { ParsedRawData } from "@/lib/types";
 
@@ -47,6 +48,18 @@ interface DebugResponse {
 
 function formatCoord(value: number) {
   return value.toFixed(6);
+}
+
+function readCoordinate(
+  rawValue: string | null,
+  fallback: number,
+  min: number,
+  max: number,
+) {
+  if (!rawValue) return fallback;
+  const value = Number.parseFloat(rawValue);
+  if (!Number.isFinite(value) || value < min || value > max) return fallback;
+  return value;
 }
 
 function buildDebugUrl(lat: number, lng: number) {
@@ -115,13 +128,30 @@ function ResponseTimeBar({ ms }: { ms: number }) {
 }
 
 export default function DebugPage() {
+  const searchParams = useSearchParams();
+  const initialLat = readCoordinate(
+    searchParams.get("lat"),
+    DEFAULT_TEST_POINT.lat,
+    -90,
+    90,
+  );
+  const initialLng = readCoordinate(
+    searchParams.get("lng") ?? searchParams.get("lon"),
+    DEFAULT_TEST_POINT.lng,
+    -180,
+    180,
+  );
+
   const [data, setData] = useState<DebugResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [latInput, setLatInput] = useState(formatCoord(DEFAULT_TEST_POINT.lat));
-  const [lngInput, setLngInput] = useState(formatCoord(DEFAULT_TEST_POINT.lng));
-  const [activeCoords, setActiveCoords] = useState(DEFAULT_TEST_POINT);
+  const [latInput, setLatInput] = useState(formatCoord(initialLat));
+  const [lngInput, setLngInput] = useState(formatCoord(initialLng));
+  const [activeCoords, setActiveCoords] = useState({
+    lat: initialLat,
+    lng: initialLng,
+  });
 
   const fetchData = useCallback(async (coords: { lat: number; lng: number }) => {
     setLoading(true);
