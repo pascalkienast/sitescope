@@ -183,6 +183,7 @@ class NatureAgent(BaseAgent):
                 lng,
                 layers,
                 info_format=service_cfg.get("info_format", DEFAULT_INFO_FORMAT),
+                buffer_m=self.wms_buffer_m,
             )
 
             for layer_name, result in results.items():

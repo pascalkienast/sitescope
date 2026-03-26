@@ -12,7 +12,7 @@ import time
 from agents import FloodAgent, NatureAgent, HeritageAgent, ZoningAgent, InfraAgent
 from models import AgentResult, AnalyzeResponse
 from report_generator import ReportGenerator
-from config import get_settings
+from config import DEFAULT_BUFFER_M, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,30 +31,34 @@ class Orchestrator:
         self.include_stretch = include_stretch
         self.report_generator = ReportGenerator()
 
-    async def analyze(self, lat: float, lng: float) -> AnalyzeResponse:
-        """
-        Run full site analysis for a given coordinate.
-
-        1. Dispatch all agents in parallel
-        2. Collect results
-        3. Generate Red Flag Report via LLM
-        4. Return structured response
-        """
-        start = time.monotonic()
-
+    def _agent_classes(self) -> list[type]:
         # Build agent list
         agent_classes = list(MVP_AGENTS)
         if self.include_stretch:
             agent_classes.extend(STRETCH_AGENTS)
+        return agent_classes
 
-        agents = [cls(wms_timeout=self.wms_timeout) for cls in agent_classes]
+    def _build_agents(self, *, wms_buffer_m: float) -> tuple[list[type], list]:
+        agent_classes = self._agent_classes()
+        agents = [
+            cls(wms_timeout=self.wms_timeout, wms_buffer_m=wms_buffer_m)
+            for cls in agent_classes
+        ]
+        return agent_classes, agents
 
-        logger.info(
-            "Starting analysis at (%.4f, %.4f) with %d agents",
-            lat, lng, len(agents),
-        )
+    async def run_agents(
+        self,
+        lat: float,
+        lng: float,
+        *,
+        wms_buffer_m: float,
+    ) -> tuple[list[AgentResult], list[str]]:
+        """Run all configured agents without generating the synthesized report."""
+        start = time.monotonic()
+        agent_classes, agents = self._build_agents(wms_buffer_m=wms_buffer_m)
 
-        # Run all agents concurrently
+        logger.info("Starting agent run at (%.4f, %.4f) with %d agents", lat, lng, len(agents))
+
         tasks = [agent.analyze(lat, lng) for agent in agents]
         agent_results: list[AgentResult] = await asyncio.gather(
             *tasks, return_exceptions=True
@@ -80,13 +84,51 @@ class Orchestrator:
             len(clean_results),
             len(errors),
         )
+        return clean_results, errors
+
+    async def analyze_without_report(
+        self,
+        lat: float,
+        lng: float,
+        *,
+        wms_buffer_m: float,
+    ) -> AnalyzeResponse:
+        """Run all agents but skip LLM/report generation."""
+        agent_results, errors = await self.run_agents(
+            lat,
+            lng,
+            wms_buffer_m=wms_buffer_m,
+        )
+
+        return AnalyzeResponse(
+            success=True,
+            report=None,
+            agent_results=agent_results,
+            errors=errors,
+        )
+
+    async def analyze(self, lat: float, lng: float) -> AnalyzeResponse:
+        """
+        Run full site analysis for a given coordinate.
+
+        1. Dispatch all agents in parallel
+        2. Collect results
+        3. Generate Red Flag Report via LLM
+        4. Return structured response
+        """
+        start = time.monotonic()
+        agent_results, errors = await self.run_agents(
+            lat,
+            lng,
+            wms_buffer_m=DEFAULT_BUFFER_M,
+        )
 
         # Generate the Red Flag Report
         try:
             report = await self.report_generator.generate(
                 lat=lat,
                 lng=lng,
-                agent_results=clean_results,
+                agent_results=agent_results,
             )
         except Exception as e:
             logger.exception("Report generation failed")
@@ -100,6 +142,6 @@ class Orchestrator:
         return AnalyzeResponse(
             success=report is not None,
             report=report,
-            agent_results=clean_results,
+            agent_results=agent_results,
             errors=errors,
         )

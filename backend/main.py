@@ -17,10 +17,21 @@ from fastapi.responses import Response
 from dotenv import load_dotenv
 
 from config import get_settings, DEMO_LOCATIONS, OPENROUTER_MODEL
-from models import AnalyzeRequest, AnalyzeResponse, HealthResponse, PDFRequest
+from models import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    AreaAnalyzeRequest,
+    AreaAnalyzeResponse,
+    AreaUnitsRequest,
+    AreaUnitsResponse,
+    HealthResponse,
+    PDFRequest,
+)
 from orchestrator import Orchestrator
 from pdf_export import render_report_pdf
 from debug import router as debug_router
+from area_analysis import analyze_area_request
+from geo.area_units import build_area_units
 
 # Load .env from project root
 load_dotenv("../.env")
@@ -139,6 +150,41 @@ async def analyze(request: AnalyzeRequest):
         logger.warning("Analysis had errors: %s", result.errors)
 
     return result
+
+
+@app.post("/api/area/units", response_model=AreaUnitsResponse)
+async def area_units(request: AreaUnitsRequest):
+    """Split a polygon selection into approximate analysis cells."""
+    try:
+        units, warnings = build_area_units(
+            request.polygon,
+            max_units=request.max_units,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return AreaUnitsResponse(
+        mode="open_data_grid",
+        exact_parcels=False,
+        warnings=warnings,
+        units=units,
+    )
+
+
+@app.post("/api/area/analyze", response_model=AreaAnalyzeResponse)
+async def area_analyze(request: AreaAnalyzeRequest):
+    """Run batch point analysis for selected area units without LLM synthesis."""
+    for unit in request.units:
+        if not _is_in_bavaria(unit.lat, unit.lng):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Area unit {unit.id} ({unit.lat:.4f}, {unit.lng:.4f}) "
+                    "is outside Bavaria's supported coverage area."
+                ),
+            )
+
+    return await analyze_area_request(request)
 
 
 @app.post("/api/report/pdf")

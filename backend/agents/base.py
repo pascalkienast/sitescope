@@ -16,7 +16,8 @@ from geo.parsers import (
     make_original_raw_response_preview,
     parsed_raw_data_to_text,
 )
-from config import DEFAULT_CRS, DEFAULT_WMS_VERSION
+from config import DEFAULT_BUFFER_M, DEFAULT_CRS, DEFAULT_WMS_VERSION
+from risk import highest_risk
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,9 @@ class BaseAgent(ABC):
     category: AgentCategory
     agent_name: str
 
-    def __init__(self, wms_timeout: int = 30):
+    def __init__(self, wms_timeout: int = 30, wms_buffer_m: float = DEFAULT_BUFFER_M):
         self.wms_timeout = wms_timeout
+        self.wms_buffer_m = wms_buffer_m
         self.layers_queried = 0
 
     async def analyze(self, lat: float, lng: float) -> AgentResult:
@@ -88,15 +90,7 @@ class BaseAgent(ABC):
         if not findings:
             return RiskLevel.NONE
 
-        priority = {
-            RiskLevel.HIGH: 4,
-            RiskLevel.MEDIUM: 3,
-            RiskLevel.LOW: 2,
-            RiskLevel.NONE: 1,
-            RiskLevel.UNKNOWN: 0,
-        }
-        max_risk = max(findings, key=lambda f: priority.get(f.risk_level, 0))
-        return max_risk.risk_level
+        return highest_risk(f.risk_level for f in findings)
 
     def _build_summary(self, findings: list[AgentFinding]) -> str:
         """Build a human-readable summary from findings."""

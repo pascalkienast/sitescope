@@ -4,6 +4,7 @@
  */
 
 export type RiskLevel = "HIGH" | "MEDIUM" | "LOW" | "NONE" | "UNKNOWN";
+export type AnalysisMode = "point" | "area";
 
 export type AgentCategory =
   | "flood"
@@ -85,6 +86,64 @@ export interface AnalyzeResponse {
   report: RedFlagReport | null;
   agent_results: AgentResult[];
   errors: string[];
+}
+
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+export interface GeoJsonPolygon {
+  type: "Polygon";
+  coordinates: number[][][];
+}
+
+export interface AreaUnit {
+  id: string;
+  label: string;
+  geometry: GeoJsonPolygon;
+  sample_point: LatLng;
+  area_sqm: number;
+}
+
+export interface AreaUnitsResponse {
+  mode: "open_data_grid";
+  exact_parcels: boolean;
+  warnings: string[];
+  units: AreaUnit[];
+}
+
+export interface AreaAnalyzeUnitRequest {
+  id: string;
+  label: string;
+  lat: number;
+  lng: number;
+}
+
+export interface AreaUnitResult {
+  id: string;
+  label: string;
+  lat: number;
+  lng: number;
+  overall_risk_level: RiskLevel;
+  agent_results: AgentResult[];
+  errors: string[];
+}
+
+export interface AreaCategoryRollup {
+  category: AgentCategory;
+  highest_risk: RiskLevel;
+  affected_units: string[];
+}
+
+export interface AreaAnalyzeResponse {
+  success: boolean;
+  mode: "open_data_grid";
+  exact_parcels: boolean;
+  warnings: string[];
+  units_analyzed: number;
+  unit_results: AreaUnitResult[];
+  category_rollup: AreaCategoryRollup[];
 }
 
 export interface DemoLocation {

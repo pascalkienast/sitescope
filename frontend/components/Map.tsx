@@ -1,20 +1,38 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
-import type { DemoLocation } from "@/lib/types";
+import type { Feature, FeatureCollection, Polygon } from "geojson";
+import type {
+  AnalysisMode,
+  AreaAnalyzeResponse,
+  AreaUnit,
+  DemoLocation,
+  LatLng,
+} from "@/lib/types";
 
 interface MapProps {
-  onClick: (lat: number, lng: number) => void;
-  selectedCoords: { lat: number; lng: number } | null;
+  mode: AnalysisMode;
+  onPointClick: (lat: number, lng: number) => void;
+  selectedCoords: LatLng | null;
   demoLocations: DemoLocation[];
+  showDemoMarkers: boolean;
+  areaVertices: LatLng[];
+  areaClosed: boolean;
+  areaUnits: AreaUnit[];
+  selectedAreaUnitIds: string[];
+  areaResult: AreaAnalyzeResponse | null;
+  onAreaVertexAdd: (lat: number, lng: number) => void;
+  onAreaComplete: (lat: number, lng: number) => void;
+  onAreaUnitClick: (unitId: string) => void;
+  showParcelOverlay: boolean;
 }
 
-// Munich center as default view
 const DEFAULT_CENTER: [number, number] = [11.576, 48.137];
 const DEFAULT_ZOOM = 12;
+const PARCEL_OVERLAY_URL =
+  "https://geoservices.bayern.de/od/wms/alkis/v1/parzellarkarte?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=by_alkis_parzellarkarte_umr_gelb&STYLES=&FORMAT=image/png&TRANSPARENT=true&WIDTH=256&HEIGHT=256&CRS=EPSG:3857&BBOX={bbox-epsg-3857}";
 
-// Free OpenStreetMap tile source
 const OSM_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
@@ -37,12 +55,15 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
   ],
 };
 
-export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
+export function Map(props: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const demoMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const mapReadyRef = useRef(false);
+  const latestRef = useRef(props);
+  latestRef.current = props;
 
-  // Initialize map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -62,84 +83,221 @@ export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
       "top-right"
     );
 
+    const handleLoad = () => {
+      mapReadyRef.current = true;
+      ensureMapLayers(map);
+      syncDraftSource(
+        map,
+        latestRef.current.mode === "area" ? latestRef.current.areaVertices : [],
+        latestRef.current.mode === "area" && latestRef.current.areaClosed
+      );
+      syncUnitsSource(
+        map,
+        latestRef.current.mode === "area" ? latestRef.current.areaUnits : [],
+        latestRef.current.mode === "area" ? latestRef.current.selectedAreaUnitIds : [],
+        latestRef.current.mode === "area" ? latestRef.current.areaResult : null
+      );
+      syncParcelOverlay(map, latestRef.current.mode, latestRef.current.showParcelOverlay);
+    };
+
+    const handleClick = (event: maplibregl.MapMouseEvent) => {
+      const current = latestRef.current;
+      if (current.mode === "point") {
+        const { lat, lng } = event.lngLat;
+        current.onPointClick(lat, lng);
+        return;
+      }
+
+      const clickedUnitId = findUnitIdAtPoint(map, event.point);
+      if (clickedUnitId) {
+        current.onAreaUnitClick(clickedUnitId);
+        return;
+      }
+
+      if (current.areaClosed) {
+        return;
+      }
+
+      const clickedDraftVertexIndex = findDraftVertexIndexAtPoint(map, event.point);
+      if (clickedDraftVertexIndex === 0 && current.areaVertices.length >= 3) {
+        current.onAreaComplete(
+          current.areaVertices[0].lat,
+          current.areaVertices[0].lng
+        );
+        return;
+      }
+
+      if (clickedDraftVertexIndex !== null) {
+        return;
+      }
+
+      const clickDetail = (event.originalEvent as MouseEvent | undefined)?.detail ?? 1;
+      if (clickDetail > 1) {
+        return;
+      }
+
+      current.onAreaVertexAdd(event.lngLat.lat, event.lngLat.lng);
+    };
+
+    const handleDoubleClick = (event: maplibregl.MapMouseEvent) => {
+      const current = latestRef.current;
+      if (current.mode !== "area" || current.areaClosed || current.areaVertices.length < 2) {
+        return;
+      }
+
+      event.preventDefault();
+      current.onAreaComplete(event.lngLat.lat, event.lngLat.lng);
+    };
+
+    const handleMouseMove = (event: maplibregl.MapMouseEvent) => {
+      const current = latestRef.current;
+      const unitId =
+        current.mode === "area" ? findUnitIdAtPoint(map, event.point) : null;
+      const draftVertexIndex =
+        current.mode === "area" && !current.areaClosed
+          ? findDraftVertexIndexAtPoint(map, event.point)
+          : null;
+
+      if (unitId) {
+        map.getCanvas().style.cursor = "pointer";
+        return;
+      }
+
+      if (draftVertexIndex === 0 && current.areaVertices.length >= 3) {
+        map.getCanvas().style.cursor = "pointer";
+        return;
+      }
+
+      if (current.mode === "area" && !current.areaClosed) {
+        map.getCanvas().style.cursor = "crosshair";
+        return;
+      }
+
+      map.getCanvas().style.cursor = current.mode === "point" ? "crosshair" : "default";
+    };
+
+    map.on("load", handleLoad);
+    map.on("click", handleClick);
+    map.on("dblclick", handleDoubleClick);
+    map.on("mousemove", handleMouseMove);
+
     mapRef.current = map;
 
     return () => {
+      demoMarkersRef.current.forEach((marker) => marker.remove());
+      demoMarkersRef.current = [];
+      markerRef.current?.remove();
+      markerRef.current = null;
+      mapReadyRef.current = false;
       map.remove();
       mapRef.current = null;
     };
   }, []);
 
-  // Handle map clicks
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current) return;
+
+    if (props.mode === "area") {
+      map.doubleClickZoom.disable();
+    } else {
+      map.doubleClickZoom.enable();
+    }
+
+    syncDraftSource(map, props.mode === "area" ? props.areaVertices : [], props.mode === "area" && props.areaClosed);
+    syncUnitsSource(
+      map,
+      props.mode === "area" ? props.areaUnits : [],
+      props.mode === "area" ? props.selectedAreaUnitIds : [],
+      props.mode === "area" ? props.areaResult : null
+    );
+    syncParcelOverlay(map, props.mode, props.showParcelOverlay);
+  }, [
+    props.mode,
+    props.showParcelOverlay,
+    props.areaVertices,
+    props.areaClosed,
+    props.areaUnits,
+    props.selectedAreaUnitIds,
+    props.areaResult,
+  ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current) return;
+    syncDraftSource(
+      map,
+      props.mode === "area" ? props.areaVertices : [],
+      props.mode === "area" && props.areaClosed
+    );
+  }, [props.areaVertices, props.areaClosed, props.mode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current) return;
+    syncUnitsSource(
+      map,
+      props.mode === "area" ? props.areaUnits : [],
+      props.mode === "area" ? props.selectedAreaUnitIds : [],
+      props.mode === "area" ? props.areaResult : null
+    );
+  }, [props.areaUnits, props.selectedAreaUnitIds, props.areaResult, props.mode]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    const handleClick = (e: maplibregl.MapMouseEvent) => {
-      const { lat, lng } = e.lngLat;
-      onClick(lat, lng);
-    };
-
-    map.on("click", handleClick);
-    return () => {
-      map.off("click", handleClick);
-    };
-  }, [onClick]);
-
-  // Update marker on selected coords
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    // Remove old marker
     if (markerRef.current) {
       markerRef.current.remove();
       markerRef.current = null;
     }
 
-    if (selectedCoords) {
-      // Create a pulsing marker element
-      const el = document.createElement("div");
-      el.innerHTML = `
-        <div style="
-          width: 24px; height: 24px; 
-          background: #3B82F6; 
-          border: 3px solid white; 
-          border-radius: 50%; 
-          box-shadow: 0 2px 8px rgba(59,130,246,0.5);
-          cursor: pointer;
-        "></div>
-      `;
-
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([selectedCoords.lng, selectedCoords.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 12 }).setHTML(
-            `<strong>Analyzing…</strong><br/>
-             ${selectedCoords.lat.toFixed(4)}, ${selectedCoords.lng.toFixed(4)}`
-          )
-        )
-        .addTo(map);
-
-      markerRef.current = marker;
-
-      // Fly to the location
-      map.flyTo({
-        center: [selectedCoords.lng, selectedCoords.lat],
-        zoom: Math.max(map.getZoom(), 14),
-        duration: 800,
-      });
+    if (props.mode !== "point" || !props.selectedCoords) {
+      return;
     }
-  }, [selectedCoords]);
 
-  // Add demo location markers
+    const el = document.createElement("div");
+    el.innerHTML = `
+      <div style="
+        width: 24px; height: 24px;
+        background: #3B82F6;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(59,130,246,0.5);
+        cursor: pointer;
+      "></div>
+    `;
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([props.selectedCoords.lng, props.selectedCoords.lat])
+      .setPopup(
+        new maplibregl.Popup({ offset: 12 }).setHTML(
+          `<strong>Analyzing…</strong><br/>${props.selectedCoords.lat.toFixed(4)}, ${props.selectedCoords.lng.toFixed(4)}`
+        )
+      )
+      .addTo(map);
+
+    markerRef.current = marker;
+
+    map.flyTo({
+      center: [props.selectedCoords.lng, props.selectedCoords.lat],
+      zoom: Math.max(map.getZoom(), 14),
+      duration: 800,
+    });
+  }, [props.mode, props.selectedCoords]);
+
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !demoLocations.length) return;
+    if (!map) return;
 
-    const markers: maplibregl.Marker[] = [];
+    demoMarkersRef.current.forEach((marker) => marker.remove());
+    demoMarkersRef.current = [];
 
-    for (const loc of demoLocations) {
+    if (!props.showDemoMarkers || props.mode !== "point" || !props.demoLocations.length) {
+      return;
+    }
+
+    const markers = props.demoLocations.map((location) => {
       const el = document.createElement("div");
       el.innerHTML = `
         <div style="
@@ -151,30 +309,381 @@ export function Map({ onClick, selectedCoords, demoLocations }: MapProps) {
           cursor: pointer;
           opacity: 0.7;
           transition: opacity 0.2s;
-        " 
-        onmouseenter="this.style.opacity='1';this.style.transform='scale(1.3)'" 
-        onmouseleave="this.style.opacity='0.7';this.style.transform='scale(1)'"
-        title="${loc.name}"></div>
+        " title="${location.name}"></div>
       `;
 
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        onClick(loc.lat, loc.lng);
+      el.addEventListener("mouseenter", () => {
+        const target = el.firstElementChild as HTMLElement | null;
+        if (target) {
+          target.style.opacity = "1";
+          target.style.transform = "scale(1.3)";
+        }
+      });
+      el.addEventListener("mouseleave", () => {
+        const target = el.firstElementChild as HTMLElement | null;
+        if (target) {
+          target.style.opacity = "0.7";
+          target.style.transform = "scale(1)";
+        }
+      });
+      el.addEventListener("click", (domEvent) => {
+        domEvent.stopPropagation();
+        latestRef.current.onPointClick(location.lat, location.lng);
       });
 
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([loc.lng, loc.lat])
+      return new maplibregl.Marker({ element: el })
+        .setLngLat([location.lng, location.lat])
         .addTo(map);
+    });
 
-      markers.push(marker);
-    }
+    demoMarkersRef.current = markers;
 
     return () => {
-      markers.forEach((m) => m.remove());
+      markers.forEach((marker) => marker.remove());
     };
-  }, [demoLocations, onClick]);
+  }, [props.demoLocations, props.mode, props.showDemoMarkers]);
 
-  return (
-    <div ref={containerRef} className="w-full h-full" />
+  useEffect(() => {
+    const map = mapRef.current;
+    const polygon = buildPolygon(props.areaVertices, props.areaClosed);
+    if (!map || !polygon || props.mode !== "area") return;
+
+    const ring = polygon.coordinates[0];
+    const bounds = ring.reduce(
+      (acc, [lng, lat]) => acc.extend([lng, lat]),
+      new maplibregl.LngLatBounds([ring[0][0], ring[0][1]], [ring[0][0], ring[0][1]])
+    );
+
+    map.fitBounds(bounds, {
+      padding: 60,
+      duration: 600,
+      maxZoom: 15,
+    });
+  }, [props.areaVertices, props.areaClosed, props.mode]);
+
+  return <div ref={containerRef} className="w-full h-full" />;
+}
+
+function ensureMapLayers(map: maplibregl.Map) {
+  if (!map.getSource("parcel-overlay")) {
+    map.addSource("parcel-overlay", {
+      type: "raster",
+      tiles: [PARCEL_OVERLAY_URL],
+      tileSize: 256,
+    });
+  }
+
+  if (!map.getLayer("parcel-overlay")) {
+    map.addLayer({
+      id: "parcel-overlay",
+      type: "raster",
+      source: "parcel-overlay",
+      layout: { visibility: "none" },
+      paint: { "raster-opacity": 0.8 },
+    });
+  }
+
+  if (!map.getSource("area-draft")) {
+    map.addSource("area-draft", {
+      type: "geojson",
+      data: emptyFeatureCollection(),
+    });
+  }
+
+  if (!map.getLayer("area-draft-fill")) {
+    map.addLayer({
+      id: "area-draft-fill",
+      type: "fill",
+      source: "area-draft",
+      filter: ["==", ["get", "kind"], "polygon"],
+      paint: {
+        "fill-color": "#2563EB",
+        "fill-opacity": 0.14,
+      },
+    });
+  }
+
+  if (!map.getLayer("area-draft-line")) {
+    map.addLayer({
+      id: "area-draft-line",
+      type: "line",
+      source: "area-draft",
+      filter: ["==", ["get", "kind"], "line"],
+      paint: {
+        "line-color": "#1D4ED8",
+        "line-width": 3,
+        "line-dasharray": [2, 1],
+      },
+    });
+  }
+
+  if (!map.getLayer("area-draft-vertices")) {
+    map.addLayer({
+      id: "area-draft-vertices",
+      type: "circle",
+      source: "area-draft",
+      filter: ["==", ["get", "kind"], "vertex"],
+      paint: {
+        "circle-radius": [
+          "case",
+          ["==", ["get", "isFirst"], true],
+          7,
+          5,
+        ],
+        "circle-color": [
+          "case",
+          ["==", ["get", "isFirst"], true],
+          "#F59E0B",
+          "#1D4ED8",
+        ],
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#FFFFFF",
+      },
+    });
+  }
+
+  if (!map.getSource("area-units")) {
+    map.addSource("area-units", {
+      type: "geojson",
+      data: emptyFeatureCollection(),
+    });
+  }
+
+  if (!map.getLayer("area-units-fill")) {
+    map.addLayer({
+      id: "area-units-fill",
+      type: "fill",
+      source: "area-units",
+      paint: {
+        "fill-color": [
+          "case",
+          ["==", ["get", "status"], "analyzed"],
+          [
+            "match",
+            ["get", "risk"],
+            "HIGH",
+            "#DC2626",
+            "MEDIUM",
+            "#D97706",
+            "LOW",
+            "#059669",
+            "NONE",
+            "#6B7280",
+            "#9CA3AF",
+          ],
+          ["==", ["get", "selected"], true],
+          "#2563EB",
+          "#94A3B8",
+        ],
+        "fill-opacity": [
+          "case",
+          ["==", ["get", "status"], "analyzed"],
+          0.24,
+          ["==", ["get", "selected"], true],
+          0.18,
+          0.08,
+        ],
+      },
+    });
+  }
+
+  if (!map.getLayer("area-units-line")) {
+    map.addLayer({
+      id: "area-units-line",
+      type: "line",
+      source: "area-units",
+      paint: {
+        "line-color": [
+          "case",
+          ["==", ["get", "status"], "analyzed"],
+          [
+            "match",
+            ["get", "risk"],
+            "HIGH",
+            "#B91C1C",
+            "MEDIUM",
+            "#B45309",
+            "LOW",
+            "#047857",
+            "NONE",
+            "#6B7280",
+            "#64748B",
+          ],
+          ["==", ["get", "selected"], true],
+          "#1D4ED8",
+          "#64748B",
+        ],
+        "line-width": [
+          "case",
+          ["==", ["get", "selected"], true],
+          2.5,
+          1.5,
+        ],
+      },
+    });
+  }
+}
+
+function syncParcelOverlay(
+  map: maplibregl.Map,
+  mode: AnalysisMode,
+  showParcelOverlay: boolean
+) {
+  if (!map.getLayer("parcel-overlay")) return;
+  map.setLayoutProperty(
+    "parcel-overlay",
+    "visibility",
+    mode === "area" && showParcelOverlay ? "visible" : "none"
   );
+}
+
+function syncDraftSource(
+  map: maplibregl.Map,
+  vertices: LatLng[],
+  areaClosed: boolean
+) {
+  const source = map.getSource("area-draft") as maplibregl.GeoJSONSource | undefined;
+  if (!source) return;
+  source.setData(buildDraftFeatures(vertices, areaClosed));
+}
+
+function syncUnitsSource(
+  map: maplibregl.Map,
+  areaUnits: AreaUnit[],
+  selectedAreaUnitIds: string[],
+  areaResult: AreaAnalyzeResponse | null
+) {
+  const source = map.getSource("area-units") as maplibregl.GeoJSONSource | undefined;
+  if (!source) return;
+  source.setData(buildUnitFeatures(areaUnits, selectedAreaUnitIds, areaResult));
+}
+
+function findUnitIdAtPoint(
+  map: maplibregl.Map,
+  point: maplibregl.Point
+): string | null {
+  if (!map.getLayer("area-units-fill")) {
+    return null;
+  }
+
+  const feature = map.queryRenderedFeatures(point, {
+    layers: ["area-units-fill"],
+  })[0];
+
+  const unitId = feature?.properties?.unitId;
+  return typeof unitId === "string" ? unitId : null;
+}
+
+function findDraftVertexIndexAtPoint(
+  map: maplibregl.Map,
+  point: maplibregl.Point
+): number | null {
+  if (!map.getLayer("area-draft-vertices")) {
+    return null;
+  }
+
+  const feature = map.queryRenderedFeatures(point, {
+    layers: ["area-draft-vertices"],
+  })[0];
+
+  const rawValue = feature?.properties?.vertexIndex;
+  const parsed = typeof rawValue === "string" ? Number.parseInt(rawValue, 10) : rawValue;
+  return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildDraftFeatures(vertices: LatLng[], areaClosed: boolean) {
+  const features: Feature[] = vertices.map((vertex, index) => ({
+    type: "Feature",
+    properties: {
+      kind: "vertex",
+      id: `vertex-${index}`,
+      vertexIndex: index,
+      isFirst: index === 0,
+    },
+    geometry: {
+      type: "Point",
+      coordinates: [vertex.lng, vertex.lat],
+    },
+  }));
+
+  if (vertices.length >= 2) {
+    const coordinates = vertices.map((vertex) => [vertex.lng, vertex.lat]);
+    if (areaClosed && vertices.length >= 3) {
+      coordinates.push([vertices[0].lng, vertices[0].lat]);
+    }
+
+    features.push({
+      type: "Feature",
+      properties: { kind: "line" },
+      geometry: {
+        type: "LineString",
+        coordinates,
+      },
+    });
+  }
+
+  const polygon = buildPolygon(vertices, areaClosed);
+  if (polygon) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "polygon" },
+      geometry: polygon,
+    });
+  }
+
+  return {
+    type: "FeatureCollection",
+    features,
+  } satisfies FeatureCollection;
+}
+
+function buildUnitFeatures(
+  areaUnits: AreaUnit[],
+  selectedAreaUnitIds: string[],
+  areaResult: AreaAnalyzeResponse | null
+) {
+  const resultMap = new globalThis.Map(
+    areaResult?.unit_results.map((unit) => [unit.id, unit]) ?? []
+  );
+
+  return {
+    type: "FeatureCollection",
+    features: areaUnits.map((unit) => {
+      const result = resultMap.get(unit.id);
+      return {
+        type: "Feature",
+        properties: {
+          unitId: unit.id,
+          label: unit.label,
+          selected: selectedAreaUnitIds.includes(unit.id),
+          status: result ? "analyzed" : "preview",
+          risk: result?.overall_risk_level ?? "UNKNOWN",
+        },
+        geometry: unit.geometry,
+      };
+    }),
+  } satisfies FeatureCollection;
+}
+
+function buildPolygon(vertices: LatLng[], areaClosed: boolean): Polygon | null {
+  if (!areaClosed || vertices.length < 3) {
+    return null;
+  }
+
+  return {
+    type: "Polygon",
+    coordinates: [
+      [
+        ...vertices.map((vertex) => [vertex.lng, vertex.lat]),
+        [vertices[0].lng, vertices[0].lat],
+      ],
+    ],
+  };
+}
+
+function emptyFeatureCollection() {
+  return {
+    type: "FeatureCollection",
+    features: [],
+  } satisfies FeatureCollection;
 }

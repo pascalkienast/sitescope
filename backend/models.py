@@ -5,8 +5,8 @@ Pydantic models for SiteScope requests, responses, and internal data.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Literal, Optional
+from pydantic import BaseModel, Field, model_validator
 
 
 # =============================================================================
@@ -39,6 +39,78 @@ class AnalyzeRequest(BaseModel):
     """Request body for /analyze endpoint."""
     lat: float = Field(..., ge=-90, le=90, description="Latitude (WGS84)")
     lng: float = Field(..., ge=-180, le=180, description="Longitude (WGS84)")
+
+
+class GeoJSONPolygon(BaseModel):
+    """Minimal GeoJSON Polygon representation in WGS84."""
+
+    type: Literal["Polygon"] = "Polygon"
+    coordinates: list[list[list[float]]]
+
+    @model_validator(mode="after")
+    def validate_polygon(self) -> "GeoJSONPolygon":
+        if not self.coordinates:
+            raise ValueError("Polygon must include at least one linear ring.")
+
+        for ring in self.coordinates:
+            if len(ring) < 4:
+                raise ValueError("Each polygon ring must have at least 4 positions.")
+            if ring[0] != ring[-1]:
+                raise ValueError("Each polygon ring must be closed.")
+            for position in ring:
+                if len(position) != 2:
+                    raise ValueError("Each polygon position must be [lng, lat].")
+                lng, lat = position
+                if not (-180 <= lng <= 180 and -90 <= lat <= 90):
+                    raise ValueError("Polygon coordinates must be valid WGS84 coordinates.")
+
+        return self
+
+
+class AreaUnitsRequest(BaseModel):
+    """Request body for /api/area/units."""
+
+    polygon: GeoJSONPolygon
+    max_units: int = Field(default=20, ge=1, le=20)
+
+
+class SamplePoint(BaseModel):
+    """Representative point in WGS84."""
+
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+
+
+class AreaUnit(BaseModel):
+    """Approximate analysis unit derived from a polygon selection."""
+
+    id: str
+    label: str
+    geometry: GeoJSONPolygon
+    sample_point: SamplePoint
+    area_sqm: float = Field(..., ge=0)
+
+
+class AreaAnalyzeUnitRequest(BaseModel):
+    """Selected unit forwarded to /api/area/analyze."""
+
+    id: str
+    label: str
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+
+
+class AreaAnalyzeRequest(BaseModel):
+    """Request body for /api/area/analyze."""
+
+    units: list[AreaAnalyzeUnitRequest] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_unique_unit_ids(self) -> "AreaAnalyzeRequest":
+        unit_ids = [unit.id for unit in self.units]
+        if len(set(unit_ids)) != len(unit_ids):
+            raise ValueError("Area analysis units must have unique ids.")
+        return self
 
 
 class PDFRequest(BaseModel):
@@ -160,6 +232,47 @@ class AnalyzeResponse(BaseModel):
     report: Optional[RedFlagReport] = None
     agent_results: list[AgentResult] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+
+
+class AreaUnitsResponse(BaseModel):
+    """Response from /api/area/units."""
+
+    mode: Literal["open_data_grid"] = "open_data_grid"
+    exact_parcels: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    units: list[AreaUnit] = Field(default_factory=list)
+
+
+class AreaUnitResult(BaseModel):
+    """Batch analysis result for one selected area unit."""
+
+    id: str
+    label: str
+    lat: float
+    lng: float
+    overall_risk_level: RiskLevel
+    agent_results: list[AgentResult] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class AreaCategoryRollup(BaseModel):
+    """Roll-up of a category across all analyzed area units."""
+
+    category: AgentCategory
+    highest_risk: RiskLevel
+    affected_units: list[str] = Field(default_factory=list)
+
+
+class AreaAnalyzeResponse(BaseModel):
+    """Response from /api/area/analyze."""
+
+    success: bool = True
+    mode: Literal["open_data_grid"] = "open_data_grid"
+    exact_parcels: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    units_analyzed: int = 0
+    unit_results: list[AreaUnitResult] = Field(default_factory=list)
+    category_rollup: list[AreaCategoryRollup] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

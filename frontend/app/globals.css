@@ -13,11 +13,6 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* MapLibre GL overrides */
-.maplibregl-canvas {
-  cursor: crosshair !important;
-}
-
 .maplibregl-popup-content {
   border-radius: 8px;
   padding: 8px 12px;
