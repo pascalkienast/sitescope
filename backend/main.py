@@ -20,6 +20,7 @@ from config import get_settings, DEMO_LOCATIONS, OPENROUTER_MODEL
 from models import AnalyzeRequest, AnalyzeResponse, HealthResponse, PDFRequest
 from orchestrator import Orchestrator
 from pdf_export import render_report_pdf
+from debug import router as debug_router
 
 # Load .env from project root
 load_dotenv("../.env")
@@ -61,6 +62,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Register debug/diagnostics router
+app.include_router(debug_router)
 
 
 @app.get("/health", response_model=HealthResponse)
