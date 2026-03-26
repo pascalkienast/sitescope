@@ -95,15 +95,16 @@ async def _check_wms_service(
             "HEIGHT": "256",
             "X": "128",
             "Y": "128",
-            "INFO_FORMAT": "text/html",
+            "INFO_FORMAT": "application/json",
             "STYLES": "",
         }
         gfi_resp = await client.get(
             svc["url"], params=gfi_params, timeout=CHECK_TIMEOUT
         )
         gfi_resp.raise_for_status()
-        gfi_text = gfi_resp.text[:500]
+        gfi_text = gfi_resp.text[:800]
         result["data_test_ok"] = True
+        # If server doesn't support JSON, it may return HTML/XML — that's still OK
         result["sample_data"] = gfi_text.strip() if gfi_text.strip() else "(empty — no features at test point)"
 
     except Exception as exc:
