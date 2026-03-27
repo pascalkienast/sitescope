@@ -19,13 +19,12 @@ function getApiBase(): string {
 
   if (typeof window !== "undefined") {
     const { protocol, hostname, port, origin } = window.location;
-    if (port === "8000") {
-      return origin;
+    // Local dev: direct backend access
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return port === "8000" ? origin : `${protocol}//127.0.0.1:8000`;
     }
-
-    const backendHost =
-      hostname === "localhost" || hostname === "127.0.0.1" ? "127.0.0.1" : hostname;
-    return `${protocol}//${backendHost}:8000`;
+    // Production: fetch calls already include /api/ prefix, nginx proxies it
+    return "";
   }
 
   return "http://127.0.0.1:8000";
