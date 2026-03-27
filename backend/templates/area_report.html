@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>SiteScope Flächenreport</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.6cm;
+            @bottom-center {
+                content: "SiteScope Flächenreport - Seite " counter(page) " von " counter(pages);
+                font-size: 9px;
+                color: #94A3B8;
+            }
+        }
+
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            color: #0F172A;
+            font-size: 10.5pt;
+            line-height: 1.5;
+        }
+
+        h1, h2, h3, p {
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 22pt;
+            margin-top: 4px;
+        }
+
+        h2 {
+            font-size: 13pt;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #E2E8F0;
+        }
+
+        h3 {
+            font-size: 11pt;
+            margin-bottom: 8px;
+        }
+
+        .eyebrow {
+            font-size: 9pt;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #2563EB;
+        }
+
+        .subtitle {
+            margin-top: 6px;
+            color: #64748B;
+        }
+
+        .risk-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 9pt;
+            font-weight: 700;
+        }
+
+        .risk-HIGH { background: #FEE2E2; color: #B91C1C; }
+        .risk-MEDIUM { background: #FEF3C7; color: #B45309; }
+        .risk-LOW { background: #D1FAE5; color: #047857; }
+        .risk-NONE { background: #F1F5F9; color: #475569; }
+        .risk-UNKNOWN { background: #F8FAFC; color: #64748B; }
+
+        .summary-grid {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 10px 10px;
+            margin: 14px -10px 0;
+        }
+
+        .summary-card {
+            width: 50%;
+            vertical-align: top;
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+
+        .summary-label {
+            font-size: 8.5pt;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748B;
+        }
+
+        .summary-value {
+            font-size: 14pt;
+            font-weight: 700;
+            margin-top: 6px;
+        }
+
+        .summary-note {
+            font-size: 9pt;
+            color: #475569;
+            margin-top: 4px;
+        }
+
+        .warning-box {
+            margin-top: 14px;
+            padding: 12px 14px;
+            background: #FFF7ED;
+            border: 1px solid #FED7AA;
+            border-radius: 12px;
+            color: #9A3412;
+        }
+
+        .warning-box ul {
+            margin: 8px 0 0 18px;
+            padding: 0;
+        }
+
+        .rollup-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+
+        .rollup-table th,
+        .rollup-table td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid #E2E8F0;
+            vertical-align: top;
+        }
+
+        .rollup-table th {
+            font-size: 8.5pt;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748B;
+        }
+
+        .unit-card {
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
+            background: #FFFFFF;
+        }
+
+        .unit-head {
+            display: table;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .unit-head-left,
+        .unit-head-right {
+            display: table-cell;
+            vertical-align: top;
+        }
+
+        .unit-head-right {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .unit-meta {
+            font-size: 9pt;
+            color: #64748B;
+            margin-top: 4px;
+        }
+
+        .chips {
+            margin-top: 8px;
+        }
+
+        .chip {
+            display: inline-block;
+            margin: 0 6px 6px 0;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #F1F5F9;
+            color: #334155;
+            font-size: 8.5pt;
+        }
+
+        .agent-list {
+            margin: 10px 0 0 18px;
+            padding: 0;
+        }
+
+        .agent-list li {
+            margin-bottom: 8px;
+        }
+
+        .agent-label {
+            font-weight: 700;
+        }
+
+        .muted {
+            color: #64748B;
+        }
+
+        .error-box {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #FDE68A;
+            background: #FEFCE8;
+            color: #854D0E;
+        }
+    </style>
+</head>
+<body>
+    <p class="eyebrow">SiteScope</p>
+    <h1>Flächenreport</h1>
+    <p class="subtitle">
+        Stand: {{ generated_at }}<br>
+        Polygonpunkte: {{ polygon_points }} - {{ coverage_label }}
+    </p>
+
+    <table class="summary-grid">
+        <tr>
+            <td class="summary-card">
+                <div class="summary-label">Gesamtstatus</div>
+                <div class="summary-value">
+                    <span class="risk-badge risk-{{ overall_risk }}">{{ overall_risk }}</span>
+                </div>
+                <div class="summary-note">Höchstes Risiko über alle analysierten Zellen</div>
+            </td>
+            <td class="summary-card">
+                <div class="summary-label">Abdeckung</div>
+                <div class="summary-value">{{ units_analyzed }} / {{ units_total }}</div>
+                <div class="summary-note">Analysezellen mit vorhandenem Batch-Ergebnis</div>
+            </td>
+        </tr>
+        <tr>
+            <td class="summary-card">
+                <div class="summary-label">Fläche in Vorschau</div>
+                <div class="summary-value">{{ area_total_label }}</div>
+                <div class="summary-note">Approximation über die aktuell verfügbaren Analysezellen</div>
+            </td>
+            <td class="summary-card">
+                <div class="summary-label">Fläche analysiert</div>
+                <div class="summary-value">{{ area_analyzed_label }}</div>
+                <div class="summary-note">Summe der bereits ausgewerteten Zellen</div>
+            </td>
+        </tr>
+    </table>
+
+    {% if warnings %}
+    <div class="warning-box">
+        <strong>Hinweise zur Datenbasis</strong>
+        <ul>
+            {% for warning in warnings %}
+            <li>{{ warning }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <h2>Rollup nach Kategorien</h2>
+    <table class="rollup-table">
+        <thead>
+            <tr>
+                <th>Kategorie</th>
+                <th>Höchstes Risiko</th>
+                <th>Betroffene Zellen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in rollup %}
+            <tr>
+                <td>{{ entry.label }}</td>
+                <td><span class="risk-badge risk-{{ entry.risk_level }}">{{ entry.risk_level }}</span></td>
+                <td>{{ entry.affected_units_count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Analysierte Zellen</h2>
+    {% for unit in unit_sections %}
+    <div class="unit-card">
+        <div class="unit-head">
+            <div class="unit-head-left">
+                <h3>{{ unit.label }}</h3>
+                <p class="unit-meta">{{ unit.coords }} - {{ unit.area_label }}</p>
+            </div>
+            <div class="unit-head-right">
+                <span class="risk-badge risk-{{ unit.risk_level }}">{{ unit.risk_level }}</span>
+            </div>
+        </div>
+
+        {% if unit.active_agents %}
+        <div class="chips">
+            {% for agent in unit.active_agents %}
+            <span class="chip">{{ agent.label }}: {{ agent.risk_level }}</span>
+            {% endfor %}
+        </div>
+
+        <ul class="agent-list">
+            {% for agent in unit.active_agents %}
+            <li>
+                <span class="agent-label">{{ agent.label }}</span><br>
+                <span class="muted">{{ agent.summary }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">Keine aktiven Risikokategorien gemeldet.</p>
+        {% endif %}
+
+        {% if unit.errors %}
+        <div class="error-box">
+            <strong>Warnhinweise</strong>
+            <ul>
+                {% for error in unit.errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</body>
+</html>

@@ -8,8 +8,10 @@ import { ReportPanel } from "@/components/ReportPanel";
 import {
   analyzeAreaUnits,
   analyzeSite,
+  downloadAreaPDF,
   fetchAreaUnits,
   getDemoLocations,
+  saveBlobAs,
 } from "@/lib/api";
 import type {
   AnalysisMode,
@@ -30,6 +32,8 @@ const Map = dynamic(() => import("@/components/Map").then((module) => module.Map
   ),
 });
 
+const DEFAULT_SELECTED_AREA_UNITS = 6;
+
 export default function Home() {
   const [mode, setMode] = useState<AnalysisMode>("point");
   const [demoLocations, setDemoLocations] = useState<DemoLocation[]>([]);
@@ -49,6 +53,15 @@ export default function Home() {
   const [areaUnits, setAreaUnits] = useState<AreaUnit[]>([]);
   const [selectedAreaUnitIds, setSelectedAreaUnitIds] = useState<string[]>([]);
   const [areaResult, setAreaResult] = useState<AreaAnalyzeResponse | null>(null);
+  const [areaDetailUnitId, setAreaDetailUnitId] = useState<string | null>(null);
+  const [areaDetailReports, setAreaDetailReports] = useState<
+    Record<string, AnalyzeResponse>
+  >({});
+  const [areaDetailErrors, setAreaDetailErrors] = useState<
+    Record<string, string>
+  >({});
+  const [areaDetailLoadingId, setAreaDetailLoadingId] = useState<string | null>(null);
+  const [areaPdfDownloading, setAreaPdfDownloading] = useState(false);
 
   useEffect(() => {
     getDemoLocations().then(setDemoLocations).catch(() => {});
@@ -99,6 +112,11 @@ export default function Home() {
     setAreaUnits([]);
     setSelectedAreaUnitIds([]);
     setAreaResult(null);
+    setAreaDetailUnitId(null);
+    setAreaDetailReports({});
+    setAreaDetailErrors({});
+    setAreaDetailLoadingId(null);
+    setAreaPdfDownloading(false);
     if (clearPolygon) {
       setAreaVertices([]);
       setAreaClosed(false);
@@ -140,7 +158,11 @@ export default function Home() {
       const response = await fetchAreaUnits(polygon);
       setAreaWarnings(response.warnings);
       setAreaUnits(response.units);
-      setSelectedAreaUnitIds(response.units.map((unit) => unit.id));
+      setSelectedAreaUnitIds(
+        response.units
+          .slice(0, DEFAULT_SELECTED_AREA_UNITS)
+          .map((unit) => unit.id)
+      );
       if (response.units.length === 0) {
         setAreaError("No approximate analysis cells could be derived from this polygon.");
       }
@@ -205,6 +227,7 @@ export default function Home() {
     setAreaAnalyzing(true);
     setAreaError(null);
     setAreaResult(null);
+    setAreaDetailUnitId(null);
 
     try {
       const response = await analyzeAreaUnits(selectedUnits);
@@ -217,19 +240,90 @@ export default function Home() {
     }
   }
 
+  async function handleOpenAreaUnitDetail(
+    unitId: string,
+    { forceReload = false }: { forceReload?: boolean } = {}
+  ) {
+    const analyzedUnit = areaResult?.unit_results.find((unit) => unit.id === unitId);
+    if (!analyzedUnit) return;
+
+    setAreaDetailUnitId(unitId);
+    setAreaDetailErrors((current) => {
+      const next = { ...current };
+      delete next[unitId];
+      return next;
+    });
+
+    if (!forceReload && areaDetailReports[unitId]) {
+      return;
+    }
+
+    setAreaDetailLoadingId(unitId);
+
+    try {
+      const response = await analyzeSite(analyzedUnit.lat, analyzedUnit.lng);
+      setAreaDetailReports((current) => ({
+        ...current,
+        [unitId]: response,
+      }));
+    } catch (error) {
+      setAreaDetailErrors((current) => ({
+        ...current,
+        [unitId]:
+          error instanceof Error ? error.message : "Detailreport konnte nicht geladen werden",
+      }));
+    } finally {
+      setAreaDetailLoadingId((current) => (current === unitId ? null : current));
+    }
+  }
+
+  function handleCloseAreaUnitDetail() {
+    setAreaDetailUnitId(null);
+  }
+
+  async function handleDownloadAreaReportPDF() {
+    const polygon = buildPolygon(areaVertices);
+    if (!polygon || !areaResult) return;
+
+    setAreaPdfDownloading(true);
+
+    try {
+      const blob = await downloadAreaPDF({
+        polygon,
+        units: areaUnits,
+        analysis: areaResult,
+      });
+      saveBlobAs(blob, "sitescope-flaechenreport.pdf");
+    } catch (error) {
+      alert(
+        `Flächen-PDF fehlgeschlagen: ${
+          error instanceof Error ? error.message : "Unbekannter Fehler"
+        }`
+      );
+    } finally {
+      setAreaPdfDownloading(false);
+    }
+  }
+
   function handleAreaUnitMapClick(unitId: string) {
     const analyzedUnit = areaResult?.unit_results.find((unit) => unit.id === unitId);
     if (analyzedUnit) {
-      void runPointAnalysis(
-        { lat: analyzedUnit.lat, lng: analyzedUnit.lng },
-        { switchToPoint: true }
-      );
+      void handleOpenAreaUnitDetail(unitId);
       return;
     }
 
     handleToggleAreaUnit(unitId);
   }
 
+  const areaDetailUnit =
+    areaDetailUnitId !== null
+      ? areaResult?.unit_results.find((unit) => unit.id === areaDetailUnitId) ?? null
+      : null;
+  const areaDetailReport =
+    areaDetailUnitId !== null ? areaDetailReports[areaDetailUnitId] ?? null : null;
+  const areaDetailError =
+    areaDetailUnitId !== null ? areaDetailErrors[areaDetailUnitId] ?? null : null;
+  const areaPanelView = areaDetailUnit ? "detail" : "overview";
   const showPointPanel =
     mode === "point" && (pointResult !== null || pointAnalyzing || pointError !== null);
 
@@ -344,6 +438,7 @@ export default function Home() {
             areaUnits={areaUnits}
             selectedAreaUnitIds={selectedAreaUnitIds}
             areaResult={areaResult}
+            activeAreaUnitId={mode === "area" ? areaDetailUnitId : null}
             onAreaVertexAdd={handleAreaVertexAdd}
             onAreaComplete={(lat, lng) => void handleAreaComplete(lat, lng)}
             onAreaUnitClick={handleAreaUnitMapClick}
@@ -354,6 +449,7 @@ export default function Home() {
         {mode === "area" && (
           <div className="w-full sm:w-[440px] md:w-[480px] shrink-0 border-l border-gray-200 bg-white overflow-hidden flex flex-col">
             <AreaPanel
+              view={areaPanelView}
               hasPolygon={areaClosed}
               draftVertexCount={areaVertices.length}
               previewLoading={areaPreviewLoading}
@@ -363,13 +459,25 @@ export default function Home() {
               units={areaUnits}
               selectedUnitIds={selectedAreaUnitIds}
               result={areaResult}
+              detailUnit={areaDetailUnit}
+              detailReport={areaDetailReport}
+              detailLoading={
+                areaDetailUnitId !== null && areaDetailLoadingId === areaDetailUnitId
+              }
+              detailError={areaDetailError}
+              areaPdfDownloading={areaPdfDownloading}
               onToggleUnit={handleToggleAreaUnit}
               onSelectAll={handleSelectAllAreaUnits}
               onClearSelection={handleClearAreaSelection}
               onAnalyzeSelected={() => void handleAnalyzeArea()}
-              onOpenDetailedReport={(coords) =>
-                void runPointAnalysis(coords, { switchToPoint: true })
-              }
+              onDownloadAreaPDF={() => void handleDownloadAreaReportPDF()}
+              onOpenDetailedReport={(unitId) => void handleOpenAreaUnitDetail(unitId)}
+              onCloseDetailedReport={handleCloseAreaUnitDetail}
+              onRetryDetailedReport={() => {
+                if (areaDetailUnitId) {
+                  void handleOpenAreaUnitDetail(areaDetailUnitId, { forceReload: true });
+                }
+              }}
             />
           </div>
         )}

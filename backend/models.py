@@ -275,6 +275,14 @@ class AreaAnalyzeResponse(BaseModel):
     category_rollup: list[AreaCategoryRollup] = Field(default_factory=list)
 
 
+class AreaPDFRequest(BaseModel):
+    """Request body for /api/report/area/pdf."""
+
+    polygon: GeoJSONPolygon
+    units: list[AreaUnit] = Field(min_length=1, max_length=20)
+    analysis: AreaAnalyzeResponse
+
+
 class HealthResponse(BaseModel):
     """Response from /health endpoint."""
     status: str = "ok"

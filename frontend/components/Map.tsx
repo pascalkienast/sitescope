@@ -22,6 +22,7 @@ interface MapProps {
   areaUnits: AreaUnit[];
   selectedAreaUnitIds: string[];
   areaResult: AreaAnalyzeResponse | null;
+  activeAreaUnitId: string | null;
   onAreaVertexAdd: (lat: number, lng: number) => void;
   onAreaComplete: (lat: number, lng: number) => void;
   onAreaUnitClick: (unitId: string) => void;
@@ -100,7 +101,8 @@ export function Map(props: MapProps) {
         map,
         latestRef.current.mode === "area" ? latestRef.current.areaUnits : [],
         latestRef.current.mode === "area" ? latestRef.current.selectedAreaUnitIds : [],
-        latestRef.current.mode === "area" ? latestRef.current.areaResult : null
+        latestRef.current.mode === "area" ? latestRef.current.areaResult : null,
+        latestRef.current.mode === "area" ? latestRef.current.activeAreaUnitId : null
       );
       syncParcelOverlay(map, latestRef.current.mode, latestRef.current.showParcelOverlay);
     };
@@ -214,7 +216,8 @@ export function Map(props: MapProps) {
       map,
       props.mode === "area" ? props.areaUnits : [],
       props.mode === "area" ? props.selectedAreaUnitIds : [],
-      props.mode === "area" ? props.areaResult : null
+      props.mode === "area" ? props.areaResult : null,
+      props.mode === "area" ? props.activeAreaUnitId : null
     );
     syncParcelOverlay(map, props.mode, props.showParcelOverlay);
   }, [
@@ -225,6 +228,7 @@ export function Map(props: MapProps) {
     props.areaUnits,
     props.selectedAreaUnitIds,
     props.areaResult,
+    props.activeAreaUnitId,
   ]);
 
   useEffect(() => {
@@ -244,9 +248,16 @@ export function Map(props: MapProps) {
       map,
       props.mode === "area" ? props.areaUnits : [],
       props.mode === "area" ? props.selectedAreaUnitIds : [],
-      props.mode === "area" ? props.areaResult : null
+      props.mode === "area" ? props.areaResult : null,
+      props.mode === "area" ? props.activeAreaUnitId : null
     );
-  }, [props.areaUnits, props.selectedAreaUnitIds, props.areaResult, props.mode]);
+  }, [
+    props.areaUnits,
+    props.selectedAreaUnitIds,
+    props.areaResult,
+    props.activeAreaUnitId,
+    props.mode,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -482,6 +493,8 @@ function ensureMapLayers(map: maplibregl.Map) {
         ],
         "fill-opacity": [
           "case",
+          ["==", ["get", "active"], true],
+          0.36,
           ["==", ["get", "status"], "analyzed"],
           0.24,
           ["==", ["get", "selected"], true],
@@ -520,6 +533,8 @@ function ensureMapLayers(map: maplibregl.Map) {
         ],
         "line-width": [
           "case",
+          ["==", ["get", "active"], true],
+          3.5,
           ["==", ["get", "selected"], true],
           2.5,
           1.5,
@@ -563,11 +578,14 @@ function syncUnitsSource(
   map: maplibregl.Map,
   areaUnits: AreaUnit[],
   selectedAreaUnitIds: string[],
-  areaResult: AreaAnalyzeResponse | null
+  areaResult: AreaAnalyzeResponse | null,
+  activeAreaUnitId: string | null
 ) {
   const source = map.getSource("area-units") as maplibregl.GeoJSONSource | undefined;
   if (!source) return;
-  source.setData(buildUnitFeatures(areaUnits, selectedAreaUnitIds, areaResult));
+  source.setData(
+    buildUnitFeatures(areaUnits, selectedAreaUnitIds, areaResult, activeAreaUnitId)
+  );
 }
 
 function findUnitIdAtPoint(
@@ -652,7 +670,8 @@ function buildDraftFeatures(vertices: LatLng[], areaClosed: boolean) {
 function buildUnitFeatures(
   areaUnits: AreaUnit[],
   selectedAreaUnitIds: string[],
-  areaResult: AreaAnalyzeResponse | null
+  areaResult: AreaAnalyzeResponse | null,
+  activeAreaUnitId: string | null
 ) {
   const resultMap = new globalThis.Map(
     areaResult?.unit_results.map((unit) => [unit.id, unit]) ?? []
@@ -668,6 +687,7 @@ function buildUnitFeatures(
           unitId: unit.id,
           label: unit.label,
           selected: selectedAreaUnitIds.includes(unit.id),
+          active: unit.id === activeAreaUnitId,
           status: result ? "analyzed" : "preview",
           risk: result?.overall_risk_level ?? "UNKNOWN",
         },

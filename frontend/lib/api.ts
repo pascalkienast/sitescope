@@ -6,14 +6,30 @@ import type {
   AnalyzeResponse,
   AreaAnalyzeResponse,
   AreaAnalyzeUnitRequest,
+  AreaPDFRequest,
   AreaUnitsResponse,
   DemoLocation,
   GeoJsonPolygon,
 } from "./types";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
+function getApiBase(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
+  if (typeof window !== "undefined") {
+    const { protocol, hostname, port, origin } = window.location;
+    if (port === "8000") {
+      return origin;
+    }
+
+    const backendHost =
+      hostname === "localhost" || hostname === "127.0.0.1" ? "127.0.0.1" : hostname;
+    return `${protocol}//${backendHost}:8000`;
+  }
+
+  return "http://127.0.0.1:8000";
+}
 
 /**
  * Run site analysis for a coordinate.
@@ -22,7 +38,7 @@ export async function analyzeSite(
   lat: number,
   lng: number
 ): Promise<AnalyzeResponse> {
-  const res = await fetch(`${API_BASE}/api/analyze`, {
+  const res = await fetch(`${getApiBase()}/api/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ lat, lng }),
@@ -40,7 +56,7 @@ export async function fetchAreaUnits(
   polygon: GeoJsonPolygon,
   maxUnits = 20
 ): Promise<AreaUnitsResponse> {
-  const res = await fetch(`${API_BASE}/api/area/units`, {
+  const res = await fetch(`${getApiBase()}/api/area/units`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ polygon, max_units: maxUnits }),
@@ -56,7 +72,7 @@ export async function fetchAreaUnits(
 export async function analyzeAreaUnits(
   units: AreaAnalyzeUnitRequest[]
 ): Promise<AreaAnalyzeResponse> {
-  const res = await fetch(`${API_BASE}/api/area/analyze`, {
+  const res = await fetch(`${getApiBase()}/api/area/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ units }),
@@ -74,7 +90,7 @@ export async function analyzeAreaUnits(
  * Returns a Blob that can be saved as a file.
  */
 export async function downloadPDF(lat: number, lng: number): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/api/report/pdf`, {
+  const res = await fetch(`${getApiBase()}/api/report/pdf`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ lat, lng }),
@@ -88,11 +104,27 @@ export async function downloadPDF(lat: number, lng: number): Promise<Blob> {
   return res.blob();
 }
 
+export async function downloadAreaPDF(
+  request: AreaPDFRequest
+): Promise<Blob> {
+  const res = await fetch(`${getApiBase()}/api/report/area/pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, "Flächen-PDF fehlgeschlagen"));
+  }
+
+  return res.blob();
+}
+
 /**
  * Fetch demo locations from the backend.
  */
 export async function getDemoLocations(): Promise<DemoLocation[]> {
-  const res = await fetch(`${API_BASE}/api/demo`);
+  const res = await fetch(`${getApiBase()}/api/demo`);
   if (!res.ok) return [];
   const data = await res.json();
   return data.locations || [];
@@ -103,7 +135,7 @@ export async function getDemoLocations(): Promise<DemoLocation[]> {
  */
 export async function checkHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/health`);
+    const res = await fetch(`${getApiBase()}/health`);
     return res.ok;
   } catch {
     return false;

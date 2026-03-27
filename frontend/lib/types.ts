@@ -146,6 +146,12 @@ export interface AreaAnalyzeResponse {
   category_rollup: AreaCategoryRollup[];
 }
 
+export interface AreaPDFRequest {
+  polygon: GeoJsonPolygon;
+  units: AreaUnit[];
+  analysis: AreaAnalyzeResponse;
+}
+
 export interface DemoLocation {
   name: string;
   lat: number;
@@ -158,11 +164,11 @@ export const RISK_META: Record<
   RiskLevel,
   { color: string; bg: string; label: string }
 > = {
-  HIGH: { color: "#DC2626", bg: "#FEE2E2", label: "High Risk" },
-  MEDIUM: { color: "#D97706", bg: "#FEF3C7", label: "Medium Risk" },
-  LOW: { color: "#059669", bg: "#D1FAE5", label: "Low Risk" },
-  NONE: { color: "#6B7280", bg: "#F3F4F6", label: "No Risk" },
-  UNKNOWN: { color: "#9CA3AF", bg: "#F9FAFB", label: "Unknown" },
+  HIGH: { color: "#DC2626", bg: "#FEE2E2", label: "Hohes Risiko" },
+  MEDIUM: { color: "#D97706", bg: "#FEF3C7", label: "Mittleres Risiko" },
+  LOW: { color: "#059669", bg: "#D1FAE5", label: "Niedriges Risiko" },
+  NONE: { color: "#6B7280", bg: "#F3F4F6", label: "Kein Risiko" },
+  UNKNOWN: { color: "#9CA3AF", bg: "#F9FAFB", label: "Unbekannt" },
 };
 
 /** Category display metadata */
@@ -170,9 +176,9 @@ export const CATEGORY_META: Record<
   AgentCategory,
   { emoji: string; label: string }
 > = {
-  flood: { emoji: "🌊", label: "Flood & Water Risk" },
-  nature: { emoji: "🌿", label: "Nature & Environment" },
-  heritage: { emoji: "🏛️", label: "Heritage / Monuments" },
-  zoning: { emoji: "📐", label: "Zoning & Land Use" },
-  infrastructure: { emoji: "⚡", label: "Infrastructure" },
+  flood: { emoji: "🌊", label: "Hochwasser & Wasser" },
+  nature: { emoji: "🌿", label: "Natur & Umwelt" },
+  heritage: { emoji: "🏛️", label: "Denkmalschutz" },
+  zoning: { emoji: "📐", label: "Planung & Nutzung" },
+  infrastructure: { emoji: "⚡", label: "Infrastruktur" },
 };

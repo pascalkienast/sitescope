@@ -43,7 +43,7 @@ def build_area_units(
     """Split a polygon selection into ranked approximate analysis units."""
     polygon_wgs = _polygon_from_model(polygon_model)
     warnings: list[str] = [
-        "Approximate analysis cells only. Open Bavarian data does not expose exact parcel vectors."
+        "Nur approximative Analysezellen. Offene bayerische Daten stellen keine exakten Flurstücksvektoren bereit."
     ]
 
     if not polygon_wgs.is_valid:
@@ -54,7 +54,7 @@ def build_area_units(
         raise ValueError("Polygon is outside Bavaria's supported coverage area.")
     if not _BAVARIA_POLYGON.contains(polygon_wgs):
         warnings.append(
-            "Only the part of the polygon inside Bavaria's approximate coverage box is considered."
+            "Es wird nur der Teil des Polygons innerhalb der bayerischen Abdeckungsbox berücksichtigt."
         )
         polygon_wgs = polygon_wgs.intersection(_BAVARIA_POLYGON)
 
@@ -62,7 +62,9 @@ def build_area_units(
     units = _grid_intersections(polygon_utm, max_units=max_units, grid_size=grid_size)
 
     if len(units) == max_units:
-        warnings.append(f"Selection capped at the largest {max_units} analysis cells.")
+        warnings.append(
+            f"Die Auswahl wurde auf die größten {max_units} Analysezellen begrenzt."
+        )
 
     return units, warnings
 

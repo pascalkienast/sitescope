@@ -3,7 +3,9 @@ SiteScope FastAPI Backend
 
 Main entry point. Exposes:
 - POST /api/analyze     — run full site analysis, return JSON report
+- POST /api/area/analyze — run batch area analysis without LLM report
 - POST /api/report/pdf  — run analysis and return PDF
+- POST /api/report/area/pdf — render the current area analysis to PDF
 - GET  /api/demo        — list demo locations
 - GET  /health          — health check
 """
@@ -22,13 +24,14 @@ from models import (
     AnalyzeResponse,
     AreaAnalyzeRequest,
     AreaAnalyzeResponse,
+    AreaPDFRequest,
     AreaUnitsRequest,
     AreaUnitsResponse,
     HealthResponse,
     PDFRequest,
 )
 from orchestrator import Orchestrator
-from pdf_export import render_report_pdf
+from pdf_export import render_area_report_pdf, render_report_pdf
 from debug import router as debug_router
 from area_analysis import analyze_area_request
 from geo.area_units import build_area_units
@@ -217,6 +220,60 @@ async def report_pdf(request: PDFRequest):
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/report/area/pdf")
+async def area_report_pdf(request: AreaPDFRequest):
+    """Render the current area analysis result to a downloadable PDF."""
+    if not request.analysis.unit_results:
+        raise HTTPException(
+            status_code=400,
+            detail="Area PDF requires at least one analyzed area unit.",
+        )
+
+    if request.analysis.units_analyzed != len(request.analysis.unit_results):
+        raise HTTPException(
+            status_code=400,
+            detail="Area PDF analysis payload has inconsistent unit counts.",
+        )
+
+    unit_ids = [unit.id for unit in request.units]
+    if len(set(unit_ids)) != len(unit_ids):
+        raise HTTPException(
+            status_code=400,
+            detail="Area PDF units must have unique ids.",
+        )
+
+    missing_unit_ids = sorted(
+        {
+            unit_result.id
+            for unit_result in request.analysis.unit_results
+            if unit_result.id not in set(unit_ids)
+        }
+    )
+    if missing_unit_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Area PDF analysis references unknown units: "
+                + ", ".join(missing_unit_ids)
+            ),
+        )
+
+    try:
+        pdf_bytes = render_area_report_pdf(request)
+    except Exception as exc:
+        logger.exception("Area PDF rendering failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Area PDF rendering failed: {exc}",
+        ) from exc
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="sitescope-area-report.pdf"'},
     )
 
 

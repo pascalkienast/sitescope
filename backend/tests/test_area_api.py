@@ -43,7 +43,7 @@ class AreaEndpointTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "open_data_grid")
         self.assertFalse(payload["exact_parcels"])
         self.assertEqual(len(payload["units"]), 3)
-        self.assertIn("Approximate analysis cells only", payload["warnings"][0])
+        self.assertIn("approximative Analysezellen", payload["warnings"][0])
         self.assertEqual(payload["units"][0]["geometry"]["type"], "Polygon")
         self.assertGreater(payload["units"][0]["area_sqm"], 0)
 
@@ -157,6 +157,226 @@ class AreaEndpointTests(unittest.TestCase):
         )
         self.assertEqual(flood_rollup["highest_risk"], "HIGH")
         self.assertEqual(flood_rollup["affected_units"], ["cell-01", "cell-02", "cell-03", "cell-04"])
+
+    def test_area_analyze_returns_partial_results_when_one_unit_crashes(self):
+        async def fake_analyze_without_report(self, lat, lng, *, wms_buffer_m):
+            if lat > 48.12:
+                raise RuntimeError("upstream timeout")
+
+            return AnalyzeResponse(
+                success=True,
+                report=None,
+                agent_results=[
+                    AgentResult(
+                        category=AgentCategory.FLOOD,
+                        agent_name="Flood & Water Agent",
+                        risk_level=RiskLevel.LOW,
+                        summary="stub",
+                    )
+                ],
+                errors=[],
+            )
+
+        with patch.object(
+            area_analysis.Orchestrator,
+            "analyze_without_report",
+            new=fake_analyze_without_report,
+        ):
+            response = self.client.post(
+                "/api/area/analyze",
+                json={
+                    "units": [
+                        {"id": "cell-01", "label": "Analysezelle 1", "lat": 48.11, "lng": 11.55},
+                        {"id": "cell-02", "label": "Analysezelle 2", "lat": 48.13, "lng": 11.56},
+                    ]
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["units_analyzed"], 2)
+
+        unit_results = {item["id"]: item for item in payload["unit_results"]}
+        self.assertEqual(unit_results["cell-01"]["overall_risk_level"], "LOW")
+        self.assertEqual(unit_results["cell-02"]["overall_risk_level"], "UNKNOWN")
+        self.assertEqual(unit_results["cell-02"]["agent_results"], [])
+        self.assertIn("Analysezelle konnte nicht verarbeitet werden", unit_results["cell-02"]["errors"][0])
+
+    def test_area_pdf_returns_pdf_for_partial_area_analysis(self):
+        response = self.client.post(
+            "/api/report/area/pdf",
+            json={
+                "polygon": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [11.55, 48.11],
+                            [11.57, 48.11],
+                            [11.57, 48.13],
+                            [11.55, 48.13],
+                            [11.55, 48.11],
+                        ]
+                    ],
+                },
+                "units": [
+                    {
+                        "id": "cell-01",
+                        "label": "Analysezelle 1",
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[
+                                [11.55, 48.11],
+                                [11.56, 48.11],
+                                [11.56, 48.12],
+                                [11.55, 48.12],
+                                [11.55, 48.11],
+                            ]],
+                        },
+                        "sample_point": {"lat": 48.115, "lng": 11.555},
+                        "area_sqm": 950.0,
+                    },
+                    {
+                        "id": "cell-02",
+                        "label": "Analysezelle 2",
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[
+                                [11.56, 48.11],
+                                [11.57, 48.11],
+                                [11.57, 48.12],
+                                [11.56, 48.12],
+                                [11.56, 48.11],
+                            ]],
+                        },
+                        "sample_point": {"lat": 48.115, "lng": 11.565},
+                        "area_sqm": 940.0,
+                    },
+                ],
+                "analysis": {
+                    "success": True,
+                    "mode": "open_data_grid",
+                    "exact_parcels": False,
+                    "warnings": [
+                        "Nur approximative Analysezellen. Offene bayerische Daten stellen keine exakten Flurstücksvektoren bereit."
+                    ],
+                    "units_analyzed": 1,
+                    "unit_results": [
+                        {
+                            "id": "cell-01",
+                            "label": "Analysezelle 1",
+                            "lat": 48.115,
+                            "lng": 11.555,
+                            "overall_risk_level": "MEDIUM",
+                            "agent_results": [
+                                {
+                                    "category": "flood",
+                                    "agent_name": "Flood & Water Agent",
+                                    "risk_level": "MEDIUM",
+                                    "summary": "HQ100 area intersects the sample point.",
+                                    "findings": [],
+                                    "layers_queried": 3,
+                                    "layers_with_data": 1,
+                                    "errors": [],
+                                    "execution_time_ms": 123,
+                                }
+                            ],
+                            "errors": [],
+                        }
+                    ],
+                    "category_rollup": [
+                        {
+                            "category": "flood",
+                            "highest_risk": "MEDIUM",
+                            "affected_units": ["cell-01"],
+                        },
+                        {
+                            "category": "nature",
+                            "highest_risk": "NONE",
+                            "affected_units": [],
+                        },
+                        {
+                            "category": "heritage",
+                            "highest_risk": "NONE",
+                            "affected_units": [],
+                        },
+                        {
+                            "category": "zoning",
+                            "highest_risk": "NONE",
+                            "affected_units": [],
+                        },
+                        {
+                            "category": "infrastructure",
+                            "highest_risk": "LOW",
+                            "affected_units": ["cell-01"],
+                        },
+                    ],
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF"))
+
+    def test_area_pdf_rejects_unknown_unit_reference(self):
+        response = self.client.post(
+            "/api/report/area/pdf",
+            json={
+                "polygon": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [11.55, 48.11],
+                            [11.57, 48.11],
+                            [11.57, 48.13],
+                            [11.55, 48.13],
+                            [11.55, 48.11],
+                        ]
+                    ],
+                },
+                "units": [
+                    {
+                        "id": "cell-01",
+                        "label": "Analysezelle 1",
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[
+                                [11.55, 48.11],
+                                [11.56, 48.11],
+                                [11.56, 48.12],
+                                [11.55, 48.12],
+                                [11.55, 48.11],
+                            ]],
+                        },
+                        "sample_point": {"lat": 48.115, "lng": 11.555},
+                        "area_sqm": 950.0,
+                    }
+                ],
+                "analysis": {
+                    "success": True,
+                    "mode": "open_data_grid",
+                    "exact_parcels": False,
+                    "warnings": [],
+                    "units_analyzed": 1,
+                    "unit_results": [
+                        {
+                            "id": "cell-02",
+                            "label": "Analysezelle 2",
+                            "lat": 48.115,
+                            "lng": 11.565,
+                            "overall_risk_level": "LOW",
+                            "agent_results": [],
+                            "errors": [],
+                        }
+                    ],
+                    "category_rollup": [],
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("unknown units", response.json()["detail"])
 
 
 if __name__ == "__main__":

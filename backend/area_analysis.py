@@ -5,6 +5,7 @@ Batch analysis helpers for polygon-derived area units.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from models import (
     AgentCategory,
@@ -17,9 +18,11 @@ from models import (
 from orchestrator import Orchestrator
 from risk import highest_risk
 
+logger = logging.getLogger(__name__)
+
 AREA_MODE = "open_data_grid"
 AREA_WARNINGS = [
-    "Approximate analysis cells only. Open Bavarian data does not expose exact parcel vectors.",
+    "Nur approximative Analysezellen. Offene bayerische Daten stellen keine exakten Flurstücksvektoren bereit.",
 ]
 AREA_WMS_BUFFER_M = 10.0
 AREA_MAX_UNITS = 20
@@ -33,22 +36,36 @@ async def analyze_area_request(request: AreaAnalyzeRequest) -> AreaAnalyzeRespon
 
     async def run_unit(unit) -> AreaUnitResult:
         async with semaphore:
-            response = await orchestrator.analyze_without_report(
-                unit.lat,
-                unit.lng,
-                wms_buffer_m=AREA_WMS_BUFFER_M,
-            )
-            return AreaUnitResult(
-                id=unit.id,
-                label=unit.label,
-                lat=unit.lat,
-                lng=unit.lng,
-                overall_risk_level=highest_risk(
-                    agent_result.risk_level for agent_result in response.agent_results
-                ),
-                agent_results=response.agent_results,
-                errors=response.errors,
-            )
+            try:
+                response = await orchestrator.analyze_without_report(
+                    unit.lat,
+                    unit.lng,
+                    wms_buffer_m=AREA_WMS_BUFFER_M,
+                )
+                return AreaUnitResult(
+                    id=unit.id,
+                    label=unit.label,
+                    lat=unit.lat,
+                    lng=unit.lng,
+                    overall_risk_level=highest_risk(
+                        agent_result.risk_level for agent_result in response.agent_results
+                    ),
+                    agent_results=response.agent_results,
+                    errors=response.errors,
+                )
+            except Exception as exc:
+                logger.exception("Area analysis unit %s failed", unit.id)
+                return AreaUnitResult(
+                    id=unit.id,
+                    label=unit.label,
+                    lat=unit.lat,
+                    lng=unit.lng,
+                    overall_risk_level=RiskLevel.UNKNOWN,
+                    agent_results=[],
+                    errors=[
+                        f"Analysezelle konnte nicht verarbeitet werden: {type(exc).__name__}: {exc}"
+                    ],
+                )
 
     unit_results = await asyncio.gather(*(run_unit(unit) for unit in request.units))
 
